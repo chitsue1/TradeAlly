@@ -9,5 +9,6 @@ dependencies = [
     "pandas>=2.3.3",
     "python-telegram-bot>=22.5",
     "ta>=0.11.0",
+    "telegram>=0.0.1",
     "yfinance>=1.0",
 ]

@@ -486,6 +486,7 @@ dependencies = [
     { name = "pandas" },
     { name = "python-telegram-bot" },
     { name = "ta" },
+    { name = "telegram" },
     { name = "yfinance" },
 ]
 
@@ -495,6 +496,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "python-telegram-bot", specifier = ">=22.5" },
     { name = "ta", specifier = ">=0.11.0" },
+    { name = "telegram", specifier = ">=0.0.1" },
     { name = "yfinance", specifier = ">=1.0" },
 ]
 
@@ -555,6 +557,12 @@ dependencies = [
     { name = "pandas" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e0/9a/37d92a6b470dc9088612c2399a68f1a9ac22872d4e1eff416818e22ab11b/ta-0.11.0.tar.gz", hash = "sha256:de86af43418420bd6b088a2ea9b95483071bf453c522a8441bc2f12bcf8493fd", size = 25308, upload-time = "2023-11-02T13:53:35.434Z" }
+
+[[package]]
+name = "telegram"
+version = "0.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9d/ca/8bdf2deb93b9f6971dabf2ddc827c2a98ce23e13582a15b37e9bc169f226/telegram-0.0.1.tar.gz", hash = "sha256:d405a0af4c868a8dbeae6d03e297e21c7ee6269e11e2ed3810e15544aba02591", size = 879, upload-time = "2015-09-29T07:32:18.348Z" }
 
 [[package]]
 name = "typing-extensions"

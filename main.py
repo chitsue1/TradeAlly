@@ -18,13 +18,15 @@ RSS_FEEDS = [
     "https://cryptopanic.com/news/rss/",
     "https://www.investing.com/rss/news.rss"
 ]
-NEGATIVE_KEYWORDS = ['crash', 'regulation', 'hacked', 'scam', 'fraud', 'drop', 'dump', 'ban', 'lawsuit', 'bankruptcy']
+# Negative keywords inspired by PDF books (Risk, Ruin, Liquidity, Volatility)
+NEGATIVE_KEYWORDS = ['crash', 'regulation', 'hacked', 'scam', 'fraud', 'drop', 'dump', 'ban', 'lawsuit', 'bankruptcy', 'liquidation', 'volatility']
 
 class MarketAnalyzer:
     def __init__(self, token, chat_id):
+        # Using python-telegram-bot v20+ async Bot
         self.bot = telegram.Bot(token=token) if token else None
         self.chat_id = chat_id
-        self.balance_tracker = {}  # Symbol -> Current balance based on 1.0 start
+        self.balance_tracker = {}  # Symbol -> Current balance starting from 1.0
         self.active_positions = {} # Symbol -> Entry price
 
     async def send_notification(self, message):
@@ -38,6 +40,10 @@ class MarketAnalyzer:
             print(f"LOG: {message}")
 
     def get_news_sentiment(self):
+        """
+        Analyze last 5 news items for negative sentiment based on PDF frameworks
+        (Risk of Ruin, Liquidity Sweeps, and Arbitrage stability).
+        """
         news_items = []
         for url in RSS_FEEDS:
             try:
@@ -54,9 +60,13 @@ class MarketAnalyzer:
             summary_lower = summary.lower() if summary else ''
             for kw in NEGATIVE_KEYWORDS:
                 if kw in title_lower or kw in summary_lower:
-                    # Severity assessment based on frameworks (Risk/Volatility/Arbitrage from PDF)
-                    severity = "მაღალი" if any(critical in title_lower for critical in ['crash', 'hacked', 'scam', 'bankruptcy']) else "საშუალო"
-                    warnings.append(f"⚠️ {severity} რისკი: '{kw}' - {item.title}")
+                    # Severity assessment from PDF frameworks
+                    if any(critical in title_lower for critical in ['crash', 'hacked', 'scam', 'bankruptcy', 'liquidation']):
+                        severity = "კრიტიკული რისკი (გაკოტრების ალბათობა)"
+                    else:
+                        severity = "საშუალო რისკი (ბაზრის არასტაბილურობა)"
+                    
+                    warnings.append(f"⚠️ {severity}: '{kw}' - {item.title}")
                     break
         return warnings
 
@@ -72,26 +82,22 @@ class MarketAnalyzer:
         close = df['Close']
         current_price = close.iloc[-1]
         
-        # Indicators
+        # Indicators from John Murphy and strategy PDFs
         ema_200 = EMAIndicator(close=close, window=200).ema_indicator().iloc[-1]
         rsi = RSIIndicator(close=close, window=14).rsi().iloc[-1]
         bb = BollingerBands(close=close, window=20, window_dev=2)
-        bb_high = bb.bollinger_hband().iloc[-1]
         bb_low = bb.bollinger_lband().iloc[-1]
+        bb_high = bb.bollinger_hband().iloc[-1]
         atr = AverageTrueRange(high=df['High'], low=df['Low'], close=close, window=14).average_true_range().iloc[-1]
         
         volatility_ratio = (atr / current_price) * 100
         if volatility_ratio < 0.1: 
             return None
 
-        signal = None
-        reasons = []
-
         market_trend = "UP" if current_price > ema_200 else "DOWN"
 
         if market_trend == "UP" and symbol not in self.active_positions:
             if rsi < 35 and current_price <= bb_low:
-                # Check news before confirming BUY
                 news_warnings = self.get_news_sentiment()
                 if news_warnings:
                     return {
@@ -100,37 +106,35 @@ class MarketAnalyzer:
                         "warnings": news_warnings
                     }
                 
-                signal = "BUY"
                 reasons = [
-                    "RSI მიუთითებს გადაყიდვაზე (მომენტუმის ანალიზი)",
-                    "ფასი ლიკვიდურობის ზონაშია (ბოლინჯერის ქვედა ზოლი)"
+                    "RSI მიუთითებს გადაყიდვაზე (მომენტუმის შესუსტება)",
+                    "ფასი ლიკვიდურობის ზონაშია (ბოლინჯერის ქვედა ზოლი)",
+                    "გრძელვადიანი ტრენდი დადებითია (EMA 200-ს ზემოთ)"
                 ]
+                self.active_positions[symbol] = current_price
+                return {
+                    "asset": symbol,
+                    "action": "BUY",
+                    "price": current_price,
+                    "reasons": reasons
+                }
 
         elif symbol in self.active_positions:
             entry_price = self.active_positions[symbol]
             if rsi > 65 or current_price >= bb_high:
-                signal = "SELL"
                 profit_pct = ((current_price - entry_price) / entry_price) * 100
+                del self.active_positions[symbol]
                 return {
                     "asset": symbol,
                     "action": "SELL",
                     "price": current_price,
                     "profit": profit_pct
                 }
-
-        if signal == "BUY":
-            self.active_positions[symbol] = current_price
-            return {
-                "asset": symbol,
-                "action": "BUY",
-                "price": current_price,
-                "reasons": reasons
-            }
             
         return None
 
     async def run(self):
-        print("Starting Market Analysis AI with News Filter and PDF Strategy...")
+        print("Market Analysis AI Active (EMA-200 + News Context Filter)")
         while True:
             for asset in ASSETS:
                 try:
@@ -145,21 +149,19 @@ class MarketAnalyzer:
                             )
                         elif result["action"] == "WARNING":
                             message = (
-                                f"⚠️ გაფრთხილება: {result['asset']} - პოტენციური ყიდვის სიგნალი შეჩერებულია ნეგატიური ნიუსების გამო:\n"
+                                f"⚠️ გაფრთხილება: {result['asset']} - ყიდვის სიგნალი შეჩერებულია ნეგატიური ფონის გამო:\n"
                                 + "\n".join(result['warnings'][:3])
                             )
-                        else: # SELL
-                            current_val = self.balance_tracker.get(result['asset'], 1.0)
-                            new_val = current_val * (1 + result['profit'] / 100)
-                            self.balance_tracker[result['asset']] = new_val
+                        elif result["action"] == "SELL":
+                            current_bal = self.balance_tracker.get(result['asset'], 1.0)
+                            new_bal = current_bal * (1 + result['profit'] / 100)
+                            self.balance_tracker[result['asset']] = new_bal
                             
                             message = (
                                 f"🔴 გაყიდე: {result['asset']}\n"
                                 f"მოგება: {result['profit']:.2f}%\n"
-                                f"1$-ის ბალანსი იქნებოდა: {new_val:.4f}$."
+                                f"1$-ის ბალანსი იქნებოდა: {new_bal:.4f}$."
                             )
-                            if result['asset'] in self.active_positions:
-                                del self.active_positions[result['asset']]
                                 
                         await self.send_notification(message)
                 except Exception as e:
@@ -169,142 +171,8 @@ class MarketAnalyzer:
             await asyncio.sleep(CHECK_PERIOD)
 
 if __name__ == "__main__":
-    analyzer = MarketAnalyzer(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
-    asyncio.run(analyzer.run())
-
-
-    async def run(self):
-        print("Starting Market Analysis AI with News Filter and PDF Strategy...")
-        while True:
-            for asset in ASSETS:
-                try:
-                    df = self.get_data(asset)
-                    result = self.analyze(asset, df)
-                    
-                    if result:
-                        if result["action"] == "BUY":
-                            message = (
-                                f"🟢 იყიდე: {result['asset']}\n"
-                                f"მიზეზი: {', '.join(result['reasons'])}."
-                            )
-                        elif result["action"] == "WARNING":
-                            message = (
-                                f"⚠️ გაფრთხილება: {result['asset']} - პოტენციური ყიდვის სიგნალი შეჩერებულია ნეგატიური ნიუსების გამო:\n"
-                                + "\n".join(result['warnings'][:3])
-                            )
-                        else: # SELL
-                            current_val = self.balance_tracker.get(result['asset'], 1.0)
-                            new_val = current_val * (1 + result['profit'] / 100)
-                            self.balance_tracker[result['asset']] = new_val
-                            
-                            message = (
-                                f"🔴 გაყიდე: {result['asset']}\n"
-                                f"მოგება: {result['profit']:.2f}%\n"
-                                f"1$-ის ბალანსი იქნებოდა: {new_val:.4f}$."
-                            )
-                            if result['asset'] in self.active_positions:
-                                del self.active_positions[result['asset']]
-                                
-                        await self.send_notification(message)
-                except Exception as e:
-                    print(f"Error analyzing {asset}: {e}")
-            
-            print(f"Cycle complete. Waiting {CHECK_PERIOD} seconds...")
-            await asyncio.sleep(CHECK_PERIOD)
-
-if __name__ == "__main__":
-    analyzer = MarketAnalyzer(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
-    asyncio.run(analyzer.run())
-
-
-    async def run(self):
-        print("Starting Market Analysis AI with News Filter and PDF Strategy...")
-        while True:
-            for asset in ASSETS:
-                try:
-                    df = self.get_data(asset)
-                    result = self.analyze(asset, df)
-                    
-                    if result:
-                        if result["action"] == "BUY":
-                            message = (
-                                f"🟢 იყიდე: {result['asset']}\n"
-                                f"მიზეზი: {', '.join(result['reasons'])}."
-                            )
-                        elif result["action"] == "WARNING":
-                            message = (
-                                f"⚠️ გაფრთხილება: {result['asset']} - პოტენციური ყიდვის სიგნალი შეჩერებულია ნეგატიური ნიუსების გამო:\n"
-                                + "\n".join(result['warnings'][:3])
-                            )
-                        else: # SELL
-                            current_val = self.balance_tracker.get(result['asset'], 1.0)
-                            new_val = current_val * (1 + result['profit'] / 100)
-                            self.balance_tracker[result['asset']] = new_val
-                            
-                            message = (
-                                f"🔴 გაყიდე: {result['asset']}\n"
-                                f"მოგება: {result['profit']:.2f}%\n"
-                                f"1$-ის ბალანსი იქნებოდა: {new_val:.4f}$."
-                            )
-                            if result['asset'] in self.active_positions:
-                                del self.active_positions[result['asset']]
-                                
-                        await self.send_notification(message)
-                except Exception as e:
-                    print(f"Error analyzing {asset}: {e}")
-            
-            print(f"Cycle complete. Waiting {CHECK_PERIOD} seconds...")
-            await asyncio.sleep(CHECK_PERIOD)
-
-if __name__ == "__main__":
-    analyzer = MarketAnalyzer(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
-    asyncio.run(analyzer.run())
-
-
-    async def run(self):
-        print("Starting Market Analysis AI with News Filter and PDF Strategy...")
-        while True:
-            for asset in ASSETS:
-                try:
-                    df = self.get_data(asset)
-                    result = self.analyze(asset, df)
-                    
-                    if result:
-                        if result["action"] == "BUY":
-                            message = (
-                                f"🟢 იყიდე: {result['asset']}\n"
-                                f"მიზეზი: {', '.join(result['reasons'])}."
-                            )
-                        elif result["action"] == "WARNING":
-                            message = (
-                                f"⚠️ გაფრთხილება: {result['asset']} - პოტენციური ყიდვის სიგნალი შეჩერებულია ნეგატიური ნიუსების გამო:\n"
-                                + "\n".join(result['warnings'][:3])
-                            )
-                        else: # SELL
-                            current_val = self.balance_tracker.get(result['asset'], 1.0)
-                            new_val = current_val * (1 + result['profit'] / 100)
-                            self.balance_tracker[result['asset']] = new_val
-                            
-                            message = (
-                                f"🔴 გაყიდე: {result['asset']}\n"
-                                f"მოგება: {result['profit']:.2f}%\n"
-                                f"1$-ის ბალანსი იქნებოდა: {new_val:.4f}$."
-                            )
-                            if result['asset'] in self.active_positions:
-                                del self.active_positions[result['asset']]
-                                
-                        await self.send_notification(message)
-                except Exception as e:
-                    print(f"Error analyzing {asset}: {e}")
-            
-            print(f"Cycle complete. Waiting {CHECK_PERIOD} seconds...")
-            await asyncio.sleep(CHECK_PERIOD)
-
-if __name__ == "__main__":
-    analyzer = MarketAnalyzer(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
-    asyncio.run(analyzer.run())
-
-
-if __name__ == "__main__":
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Warning: Telegram configuration missing. Logging to console only.")
+    
     analyzer = MarketAnalyzer(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
     asyncio.run(analyzer.run())
