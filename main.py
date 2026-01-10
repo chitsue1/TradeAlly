@@ -2,7 +2,8 @@ import os
 import time
 import pandas as pd
 import yfinance as yf
-from ta.trend import SMAIndicator, RSIIndicator
+from ta.trend import SMAIndicator
+from ta.momentum import RSIIndicator
 import asyncio
 from telegram import Bot
 
