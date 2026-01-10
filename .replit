@@ -40,3 +40,9 @@ args = "python main.py"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[userenv]
+
+[userenv.shared]
+TELEGRAM_TOKEN = "8458601706:AAHlZaQS7NsnDENNn610cRknqOyJdW6InyA"
+TELEGRAM_CHAT_ID = "6564836899"
