@@ -56,7 +56,7 @@ RSS_FEEDS = [
         "https://www.kitco.com/rss/KitcoNews.xml"
     ]
 
-    class ProTraderBot:
+class ProTraderBot:
         def __init__(self):
             self.bot = telegram.Bot(token=TELEGRAM_TOKEN)
             self.active_positions = {}
@@ -79,7 +79,7 @@ RSS_FEEDS = [
             """აანალიზებს ნიუსებს კონკრეტული აქტივისთვის"""
             negative_impact = 0
             keywords = ['crash', 'hacked', 'scam', 'fraud', 'lawsuit', 'bankruptcy', 'bearish', 
-                       'plunge', 'collapse', 'ban', 'regulation', 'crackdown', 'seizure']
+    'plunge', 'collapse', 'ban', 'regulation', 'crackdown', 'seizure']
 
             for url in RSS_FEEDS:
                 try:
