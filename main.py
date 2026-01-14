@@ -227,7 +227,7 @@ class ProTraderBot:
                 print(f"😴 შესვენება {SCAN_INTERVAL} წამი შემდეგ ციკლამდე...\n")
                 await asyncio.sleep(SCAN_INTERVAL)
 
-    if __name__ == "__main__":
-        print("🚀 ბოტი იწყება...\n")
-        bot = ProTraderBot()
-        asyncio.run(bot.start())
+if __name__ == "__main__":
+    print("🚀 ბოტი იწყება...\n")
+    bot = ProTraderBot()
+    asyncio.run(bot.start())
