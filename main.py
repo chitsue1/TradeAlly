@@ -1,22 +1,22 @@
-    import os
-    import asyncio
-    import pandas as pd
-    import yfinance as yf
-    import feedparser
-    import telegram
-    import time
-    from ta.trend import EMAIndicator
-    from ta.momentum import RSIIndicator
-    from ta.volatility import BollingerBands
+import os
+import asyncio
+import pandas as pd
+import yfinance as yf
+import feedparser
+import telegram
+import time
+from ta.trend import EMAIndicator
+from ta.momentum import RSIIndicator
+from ta.volatility import BollingerBands
 
     # --- CONFIGURATION ---
-    TELEGRAM_TOKEN = "8458601706:AAHlZaQS7NsnDENNn610cRknqOyJdW6InyA"
-    TELEGRAM_CHAT_ID = "6564836899"
+TELEGRAM_TOKEN = "8458601706:AAHlZaQS7NsnDENNn610cRknqOyJdW6InyA"
+TELEGRAM_CHAT_ID = "6564836899"
 
     # ოპტიმიზირებული აქტივების სია: 90 აქტივი (40 კრიპტო, 28 აქცია, 22 საქონელი)
 
     # 40 კრიპტო
-    CRYPTO = [
+CRYPTO = [
         "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "DOT-USD",
         "AVAX-USD", "MATIC-USD", "LINK-USD", "UNI-USD", "ATOM-USD", "LTC-USD", "XLM-USD", 
         "BCH-USD", "ALGO-USD", "VET-USD", "ICP-USD", "FIL-USD", "HBAR-USD", "APT-USD", 
@@ -26,28 +26,28 @@
     ]
 
     # 28 აქცია
-    STOCKS = [
+STOCKS = [
         "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "TSM", "JPM", "BAC",
         "UNH", "JNJ", "WMT", "HD", "XOM", "CVX", "AMD", "INTC", "ASML", "SMCI", "AVGO",
         "ARM", "LLY", "NVO", "COST", "PANW", "CRWD", "UBER"
     ]
 
     # 22 საქონელი
-    COMMODITIES = [
+COMMODITIES = [
         "GC=F", "SI=F", "CL=F", "NG=F", "ZC=F", "ZW=F", "ZS=F", "ES=F", "NQ=F",
         "DX=F", "6E=F", "HG=F", "ZN=F", "ZF=F", "VX=F", "RTY=F", "YM=F",
         "PL=F", "PA=F", "KC=F", "SB=F", "USO"
     ]
 
-    ASSETS = CRYPTO + STOCKS + COMMODITIES
+ASSETS = CRYPTO + STOCKS + COMMODITIES
 
-    INTERVAL = "1h"
-    SCAN_INTERVAL = 90
-    ASSET_DELAY = 4
-    NOTIFICATION_COOLDOWN = 7200
+INTERVAL = "1h"
+SCAN_INTERVAL = 90
+ASSET_DELAY = 4
+NOTIFICATION_COOLDOWN = 7200
 
     # გაფართოებული ნიუსების წყაროები
-    RSS_FEEDS = [
+RSS_FEEDS = [
         "https://cryptopanic.com/news/rss/",
         "https://cointelegraph.com/rss",
         "https://www.investing.com/rss/news.rss",
