@@ -11,7 +11,7 @@ from ta.trend import EMAIndicator
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 
-TELEGRAM_TOKEN = "8458601706:AAHlZaQS7NsnDENNn610cRknqOyJdW6InyA"
+TELEGRAM_TOKEN = "8247808058:AAG9ZxIatcq7vGfgn10EWxvW5NYgInB8ok8"
 ADMIN_ID = 6564836899
 
 SUBSCRIPTIONS_FILE = "subscriptions.json"
