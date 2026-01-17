@@ -27,18 +27,25 @@ PDF_FOLDER = "My-AI-Agent_needs"
 
 # --- განახლებული აქტივების სია (Yahoo Finance 2026) ---
 CRYPTO = [
-    'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 
-    'ADA-USD', 'DOGE-USD', 'TRX-USD', 'DOT-USD', 'LINK-USD',
-    'POL-USD', 'RENDER-USD', 'AVAX-USD', 'SHIB-USD', 'LTC-USD', 
-    'BCH-USD', 'UNI-USD', 'PEPE-USD', 'APT-USD', 'SUI-USD', 
-    'NEAR-USD', 'ICP-USD', 'HBAR-USD', 'ARB-USD', 'OP-USD', 'TIA-USD'
+    "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD",
+    "ADA-USD", "DOGE-USD", "TRX-USD", "DOT-USD", "LINK-USD",
+    "AVAX-USD", "SHIB-USD", "LTC-USD", "BCH-USD",
+    "UNI-USD", "PEPE-USD", "APT-USD", "SUI-USD",
+    "NEAR-USD", "ICP-USD", "HBAR-USD",
+    "ARB-USD", "OP-USD", "TIA-USD"
+]
+
+# პრობლემური ტიკერები ცალკე
+CRYPTO_OPTIONAL = [
+    "POL-USD",      # ახალი ტიკერი (ხანმოკლე ისტორია)
+    "RNDR-USD"      # RENDER-USD-ის სწორი Yahoo ტიკერი
 ]
 
 STOCKS = [
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 
-    'BRK-B', 'V', 'JPM', 'UNH', 'MA', 'PG', 'HD', 'AVGO', 
-    'ORCL', 'COST', 'NFLX', 'ADBE', 'AMD', 'CRM', 'WMT', 
-    'LLY', 'BAC', 'XOM', 'PFE', 'DIS'
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
+    "BRK-B", "V", "JPM", "UNH", "MA", "PG", "HD",
+    "AVGO", "ORCL", "COST", "NFLX", "ADBE", "AMD",
+    "CRM", "WMT", "LLY", "BAC", "XOM", "PFE", "DIS"
 ]
 
 COMMODITIES = [
