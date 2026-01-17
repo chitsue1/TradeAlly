@@ -2,6 +2,7 @@ import os
 import asyncio
 import yfinance as yf
 import feedparser
+import requests  # დამატებულია API მოთხოვნებისთვის
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import time
@@ -16,6 +17,7 @@ try:
 except ImportError:
     print("PyPDF2 not installed - PDF features disabled")
 
+# --- კონფიგურაცია ---
 TELEGRAM_TOKEN = "8247808058:AAGBsRWw8UOoZHMoulK6dGv-QI5L6A9f9rA"
 ADMIN_ID = 6564836899
 SUBSCRIPTIONS_FILE = "subscriptions.json"
@@ -23,9 +25,27 @@ PAYMENT_REQUESTS_FILE = "payment_requests.json"
 KNOWLEDGE_BASE_FILE = "trading_knowledge.json"
 PDF_FOLDER = "My-AI-Agent_needs"
 
-CRYPTO = ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "DOT-USD", "AVAX-USD", "MATIC-USD", "LINK-USD", "UNI-USD", "ATOM-USD", "LTC-USD", "XLM-USD", "BCH-USD", "ALGO-USD", "VET-USD", "ICP-USD", "FIL-USD", "HBAR-USD", "APT-USD", "TRX-USD", "NEAR-USD", "INJ-USD", "ARB-USD", "OP-USD", "RNDR-USD", "IMX-USD", "PEPE-USD", "TIA-USD", "SEI-USD", "SUI-USD", "KAS-USD", "JTO-USD", "PYTH-USD", "BLUR-USD", "LDO-USD", "RUNE-USD", "FET-USD"]
-STOCKS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "TSM", "JPM", "BAC", "UNH", "JNJ", "WMT", "HD", "XOM", "CVX", "AMD", "INTC", "ASML", "SMCI", "AVGO", "ARM", "LLY", "NVO", "COST", "PANW", "CRWD", "UBER"]
-COMMODITIES = ["GC=F", "SI=F", "CL=F", "NG=F", "ZC=F", "ZW=F", "ZS=F", "ES=F", "NQ=F", "DX=F", "6E=F", "HG=F", "ZN=F", "ZF=F", "VX=F", "RTY=F", "YM=F", "PL=F", "PA=F", "KC=F", "SB=F", "USO"]
+# --- განახლებული აქტივების სია (Yahoo Finance 2026) ---
+CRYPTO = [
+    'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 
+    'ADA-USD', 'DOGE-USD', 'TRX-USD', 'DOT-USD', 'LINK-USD',
+    'POL-USD', 'RENDER-USD', 'AVAX-USD', 'SHIB-USD', 'LTC-USD', 
+    'BCH-USD', 'UNI-USD', 'PEPE-USD', 'APT-USD', 'SUI-USD', 
+    'NEAR-USD', 'ICP-USD', 'HBAR-USD', 'ARB-USD', 'OP-USD', 'TIA-USD'
+]
+
+STOCKS = [
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 
+    'BRK-B', 'V', 'JPM', 'UNH', 'MA', 'PG', 'HD', 'AVGO', 
+    'ORCL', 'COST', 'NFLX', 'ADBE', 'AMD', 'CRM', 'WMT', 
+    'LLY', 'BAC', 'XOM', 'PFE', 'DIS'
+]
+
+COMMODITIES = [
+    "GC=F", "SI=F", "CL=F", "NG=F", "ZC=F", "ZW=F", "ZS=F", 
+    "ES=F", "NQ=F", "DX=F", "HG=F", "VX=F", "PL=F", "PA=F", "USO"
+]
+
 ASSETS = CRYPTO + STOCKS + COMMODITIES
 
 INTERVAL = "1h"
@@ -49,6 +69,23 @@ class AITradingBot:
         self.payment_requests = self.load_json(PAYMENT_REQUESTS_FILE)
         self.trading_knowledge = self.load_trading_knowledge()
         self.setup_handlers()
+
+    # --- ბაზრის სენტიმენტის დამატება (Fear & Greed + CoinGecko) ---
+    async def get_market_sentiment(self):
+        try:
+            # Fear & Greed Index
+            fg_res = requests.get("https://api.alternative.me/fng/", timeout=10).json()
+            fg_val = int(fg_res['data'][0]['value'])
+            fg_class = fg_res['data'][0]['value_classification']
+
+            # CoinGecko Global Market Trend
+            cg_res = requests.get("https://api.coingecko.com/api/v3/global", timeout=10).json()
+            mcap_change = cg_res['data']['market_cap_change_percentage_24h_usd']
+
+            return {"fg_index": fg_val, "fg_class": fg_class, "market_trend": mcap_change}
+        except Exception as e:
+            print(f"Sentiment error: {e}")
+            return {"fg_index": 50, "fg_class": "Neutral", "market_trend": 0}
 
     def load_trading_knowledge(self):
         if os.path.exists(KNOWLEDGE_BASE_FILE):
@@ -118,9 +155,12 @@ class AITradingBot:
         except:
             return None
 
-    def ai_analyze_signal(self, symbol, data):
+    # --- MASTER FILTER დამატებულია AI ANALYZE-ში ---
+    async def ai_analyze_signal(self, symbol, data):
         score = 0
         reasons = []
+
+        # 1. ტექნიკური ინდიკატორები
         if data['rsi'] < 30:
             score += 30
             reasons.append("RSI oversold (<30)")
@@ -132,6 +172,7 @@ class AITradingBot:
         elif data['rsi'] < 40:
             score += 15
             reasons.append("RSI low (<40)")
+
         if data['price'] > data['ema200']:
             score += 25
             reasons.append("Uptrend (price > EMA200)")
@@ -140,6 +181,7 @@ class AITradingBot:
                     score += 15
                     reasons.append("AI: Trend following")
                     break
+
         if data['price'] <= data['bb_low']:
             score += 20
             reasons.append("Bollinger lower band touch")
@@ -148,12 +190,27 @@ class AITradingBot:
                     score += 10
                     reasons.append("AI: Bollinger bounce pattern")
                     break
+
+        # 2. ბაზრის საერთო სენტიმენტი (Global Sentiment)
+        sentiment = await self.get_market_sentiment()
+        if sentiment['fg_index'] < 30:
+            score += 15
+            reasons.append(f"Global: High Fear ({sentiment['fg_index']}) - Buying Opportunity")
+        elif sentiment['fg_index'] > 75:
+            score -= 20 # ზედმეტი ეიფორია სახიფათოა
+
+        if sentiment['market_trend'] > 0:
+            score += 10
+            reasons.append(f"Global: Market Trend Bullish (+{sentiment['market_trend']:.1f}%)")
+
+        # 3. PDF ცოდნა
         for p in self.trading_knowledge.get("patterns", []):
             if "bullish" in p.lower() and "reversal" in p.lower():
                 if data['rsi'] < 35 and data['price'] > data['ema200']:
                     score += 15
                     reasons.append("AI: Bullish reversal pattern")
                     break
+
         return score, reasons
 
     def setup_handlers(self):
@@ -399,7 +456,11 @@ class AITradingBot:
         if active_count == 0:
             print("⏸️ No subscribers - scanning paused")
             return
-        print(f"\n🧠 AI Scan: {len(ASSETS)} assets, Subscribers: {active_count}")
+
+        # მივიღოთ ბაზრის გლობალური სენტიმენტი ყოველი ციკლის დასაწყისში
+        sentiment_data = await self.get_market_sentiment()
+        print(f"\n🧠 AI Scan: {len(ASSETS)} assets | Fear&Greed: {sentiment_data['fg_index']} ({sentiment_data['fg_class']})")
+
         for asset in ASSETS:
             data = await self.fetch_data(asset)
             if not data:
@@ -408,14 +469,24 @@ class AITradingBot:
             if asset in self.active_positions:
                 await self.check_exit_conditions(asset, data)
             else:
-                ai_score, ai_reasons = self.ai_analyze_signal(asset, data)
+                ai_score, ai_reasons = await self.ai_analyze_signal(asset, data)
                 if ai_score >= 50:
                     is_clean = await self.get_comprehensive_news(asset)
                     if is_clean:
                         self.active_positions[asset] = {"entry_price": data['price'], "entry_time": time.time()}
                         asset_type = self.get_asset_type(asset)
-                        reasons_text = "\n".join([f"• {r}" for r in ai_reasons[:4]])
-                        msg = f"🟢 AI იყიდე: {asset} [{asset_type}]\n\n💵 ფასი: ${data['price']:.2f}\n📊 RSI: {data['rsi']:.1f}\n📈 EMA200: ${data['ema200']:.2f}\n🧠 AI Score: {ai_score}/100\n\n📌 AI მიზეზები:\n{reasons_text}\n\n🎯 Risk:\n🔴 Stop-Loss: -{STOP_LOSS_PERCENT}%\n🟢 Take-Profit: +{TAKE_PROFIT_PERCENT}%"
+                        reasons_text = "\n".join([f"• {r}" for r in ai_reasons[:5]])
+                        msg = (
+                            f"🟢 AI იყიდე: {asset} [{asset_type}]\n\n"
+                            f"💵 ფასი: ${data['price']:.2f}\n"
+                            f"📊 RSI: {data['rsi']:.1f}\n"
+                            f"📈 EMA200: ${data['ema200']:.2f}\n"
+                            f"🧠 AI Score: {ai_score}/100\n"
+                            f"📊 Fear&Greed: {sentiment_data['fg_index']} ({sentiment_data['fg_class']})\n\n"
+                            f"📌 AI მიზეზები:\n{reasons_text}\n\n"
+                            f"🎯 Risk:\n🔴 Stop-Loss: -{STOP_LOSS_PERCENT}%\n"
+                            f"🟢 Take-Profit: +{TAKE_PROFIT_PERCENT}%"
+                        )
                         await self.broadcast_signal(msg, asset)
             await asyncio.sleep(ASSET_DELAY)
         print(f"Cycle complete")
@@ -430,12 +501,10 @@ class AITradingBot:
         should_exit = False
         exit_reason = ""
 
-        # Stop loss check
         if profit_percent <= -STOP_LOSS_PERCENT:
             should_exit = True
             exit_reason = f"🔴 STOP-LOSS (-{abs(profit_percent):.2f}%)"
 
-        # Take profit check
         if not should_exit and profit_percent >= TAKE_PROFIT_PERCENT:
             should_exit = True
             exit_reason = f"🟢 TAKE-PROFIT (+{profit_percent:.2f}%)"
