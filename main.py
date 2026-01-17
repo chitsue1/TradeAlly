@@ -2,7 +2,7 @@ import os
 import asyncio
 import yfinance as yf
 import feedparser
-import requests  # დამატებულია API მოთხოვნებისთვის
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import time
@@ -25,25 +25,22 @@ PAYMENT_REQUESTS_FILE = "payment_requests.json"
 KNOWLEDGE_BASE_FILE = "trading_knowledge.json"
 PDF_FOLDER = "My-AI-Agent_needs"
 
-# --- განახლებული აქტივების სია (Yahoo Finance 2026) ---
+# --- ოპტიმიზირებული აქტივები (Yahoo Finance 2026-სთვის) ---
 CRYPTO = [
     'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 
     'ADA-USD', 'DOGE-USD', 'TRX-USD', 'DOT-USD', 'LINK-USD',
-    'POL-USD', 'RENDER-USD', 'AVAX-USD', 'SHIB-USD', 'LTC-USD', 
-    'BCH-USD', 'UNI-USD', 'PEPE-USD', 'APT-USD', 'SUI-USD', 
-    'NEAR-USD', 'ICP-USD', 'HBAR-USD', 'ARB-USD', 'OP-USD', 'TIA-USD'
+    'AVAX-USD', 'SHIB-USD', 'LTC-USD', 'BCH-USD', 'UNI-USD',
+    'NEAR-USD', 'ICP-USD', 'HBAR-USD', 'ARB-USD', 'OP-USD'
 ]
 
 STOCKS = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 
     'BRK-B', 'V', 'JPM', 'UNH', 'MA', 'PG', 'HD', 'AVGO', 
-    'ORCL', 'COST', 'NFLX', 'ADBE', 'AMD', 'CRM', 'WMT', 
-    'LLY', 'BAC', 'XOM', 'PFE', 'DIS'
+    'ORCL', 'COST', 'NFLX', 'ADBE', 'AMD', 'CRM', 'WMT'
 ]
 
 COMMODITIES = [
-    "GC=F", "SI=F", "CL=F", "NG=F", "ZC=F", "ZW=F", "ZS=F", 
-    "ES=F", "NQ=F", "DX=F", "HG=F", "VX=F", "PL=F", "PA=F", "USO"
+    "GC=F", "SI=F", "CL=F", "NG=F", "DX=F", "HG=F"
 ]
 
 ASSETS = CRYPTO + STOCKS + COMMODITIES
@@ -70,146 +67,112 @@ class AITradingBot:
         self.trading_knowledge = self.load_trading_knowledge()
         self.setup_handlers()
 
-    # --- ბაზრის სენტიმენტის დამატება (Fear & Greed + CoinGecko) ---
+    # --- გაუმჯობესებული სენტიმენტის ფუნქცია (ერორების გარეშე) ---
     async def get_market_sentiment(self):
+        sentiment_data = {"fg_index": 50, "fg_class": "Neutral", "market_trend": 0}
         try:
             # Fear & Greed Index
-            fg_res = requests.get("https://api.alternative.me/fng/", timeout=10).json()
-            fg_val = int(fg_res['data'][0]['value'])
-            fg_class = fg_res['data'][0]['value_classification']
-
-            # CoinGecko Global Market Trend
-            cg_res = requests.get("https://api.coingecko.com/api/v3/global", timeout=10).json()
-            mcap_change = cg_res['data']['market_cap_change_percentage_24h_usd']
-
-            return {"fg_index": fg_val, "fg_class": fg_class, "market_trend": mcap_change}
+            fg_res = requests.get("https://api.alternative.me/fng/", timeout=7).json()
+            if 'data' in fg_res and len(fg_res['data']) > 0:
+                sentiment_data["fg_index"] = int(fg_res['data'][0]['value'])
+                sentiment_data["fg_class"] = fg_res['data'][0]['value_classification']
         except Exception as e:
-            print(f"Sentiment error: {e}")
-            return {"fg_index": 50, "fg_class": "Neutral", "market_trend": 0}
+            print(f"F&G Index error: {e}")
+
+        try:
+            # CoinGecko Global Market (დამატებულია 'data' შემოწმება)
+            cg_res = requests.get("https://api.coingecko.com/api/v3/global", timeout=7).json()
+            if 'data' in cg_res:
+                sentiment_data["market_trend"] = cg_res['data'].get('market_cap_change_percentage_24h_usd', 0)
+        except Exception as e:
+            print(f"CoinGecko error: {e}")
+
+        return sentiment_data
 
     def load_trading_knowledge(self):
+        knowledge = {"patterns": [], "strategies": [], "indicators": []}
         if os.path.exists(KNOWLEDGE_BASE_FILE):
             try:
                 with open(KNOWLEDGE_BASE_FILE, 'r', encoding='utf-8') as f:
                     kb = json.load(f)
-                    print(f"Knowledge loaded: {len(kb.get('patterns', []))} patterns")
+                    print(f"ცოდნა ჩაიტვირთა: {len(kb.get('patterns', []))} პატერნი")
                     return kb
-            except:
-                pass
-        knowledge = {"patterns": [], "strategies": [], "indicators": []}
+            except: pass
+
         if not os.path.exists(PDF_FOLDER):
-            print(f"PDF folder not found: {PDF_FOLDER}")
+            print(f"საქაღალდე ვერ მოიძებნა: {PDF_FOLDER}")
             return knowledge
+
         try:
             pdf_files = [f for f in os.listdir(PDF_FOLDER) if f.endswith('.pdf')]
-            print(f"Loading {len(pdf_files)} PDFs...")
             for pdf_file in pdf_files:
                 pdf_path = os.path.join(PDF_FOLDER, pdf_file)
                 try:
                     with open(pdf_path, 'rb') as file:
                         pdf_reader = PyPDF2.PdfReader(file)
-                        text = ""
-                        for page in pdf_reader.pages:
-                            text += page.extract_text()
+                        text = "".join([page.extract_text() for page in pdf_reader.pages])
                         knowledge = self.extract_knowledge(text, knowledge)
-                        print(f"Loaded: {pdf_file}")
                 except Exception as e:
-                    print(f"Error {pdf_file}: {e}")
+                    print(f"შეცდომა PDF კითხვისას {pdf_file}: {e}")
+
             with open(KNOWLEDGE_BASE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(knowledge, f, indent=2, ensure_ascii=False)
-            print(f"Total: {len(knowledge['patterns'])} patterns, {len(knowledge['strategies'])} strategies")
         except Exception as e:
-            print(f"PDF error: {e}")
+            print(f"PDF პროცესის შეცდომა: {e}")
         return knowledge
 
     def extract_knowledge(self, text, knowledge):
-        text_lower = text.lower()
-        patterns_kw = ["head and shoulders", "double top", "double bottom", "triangle", "flag", "wedge", "bullish", "bearish", "reversal", "breakout", "support", "resistance"]
-        for kw in patterns_kw:
-            if kw in text_lower:
-                context = self.get_context(text, kw, 200)
-                if context and context not in knowledge["patterns"]:
-                    knowledge["patterns"].append(context)
-        strategies_kw = ["strategy", "approach", "buy when", "sell when", "entry point", "exit point", "risk management", "position sizing"]
-        for kw in strategies_kw:
-            if kw in text_lower:
-                context = self.get_context(text, kw, 200)
-                if context and context not in knowledge["strategies"]:
-                    knowledge["strategies"].append(context)
-        indicators_kw = ["rsi", "relative strength", "moving average", "ema", "sma", "macd", "bollinger", "volume", "stochastic", "fibonacci"]
-        for kw in indicators_kw:
-            if kw in text_lower:
-                context = self.get_context(text, kw, 150)
-                if context and context not in knowledge["indicators"]:
-                    knowledge["indicators"].append(context)
+        # პატერნების ამოცნობის გამარტივებული ლოგიკა
+        keywords = {
+            "patterns": ["head and shoulders", "double top", "double bottom", "triangle", "flag", "bullish", "bearish"],
+            "strategies": ["strategy", "buy when", "risk management", "entry point"],
+            "indicators": ["rsi", "ema", "macd", "bollinger", "fibonacci"]
+        }
+        for category, kws in keywords.items():
+            for kw in kws:
+                if kw in text.lower():
+                    ctx = self.get_context(text, kw)
+                    if ctx and ctx not in knowledge[category]:
+                        knowledge[category].append(ctx)
         return knowledge
 
     def get_context(self, text, keyword, chars=200):
         try:
-            index = text.lower().find(keyword)
-            if index == -1:
-                return None
-            start = max(0, index - chars // 2)
-            end = min(len(text), index + chars // 2)
-            return text[start:end].strip()
-        except:
-            return None
+            idx = text.lower().find(keyword)
+            if idx == -1: return None
+            return text[max(0, idx-chars//2):min(len(text), idx+chars//2)].strip()
+        except: return None
 
-    # --- MASTER FILTER დამატებულია AI ANALYZE-ში ---
     async def ai_analyze_signal(self, symbol, data):
         score = 0
         reasons = []
+        sentiment = await self.get_market_sentiment()
 
-        # 1. ტექნიკური ინდიკატორები
         if data['rsi'] < 30:
             score += 30
-            reasons.append("RSI oversold (<30)")
-            for k in self.trading_knowledge.get("indicators", []):
-                if "rsi" in k.lower() and ("oversold" in k.lower() or "below 30" in k.lower()):
-                    score += 10
-                    reasons.append("AI: RSI oversold strategy")
-                    break
+            reasons.append("RSI გადაყიდულია (<30)")
         elif data['rsi'] < 40:
             score += 15
-            reasons.append("RSI low (<40)")
+            reasons.append("RSI დაბალია (<40)")
 
         if data['price'] > data['ema200']:
             score += 25
-            reasons.append("Uptrend (price > EMA200)")
-            for k in self.trading_knowledge.get("strategies", []):
-                if "trend" in k.lower() or "moving average" in k.lower():
-                    score += 15
-                    reasons.append("AI: Trend following")
-                    break
+            reasons.append("აღმავალი ტრენდი (Price > EMA200)")
 
         if data['price'] <= data['bb_low']:
             score += 20
-            reasons.append("Bollinger lower band touch")
-            for k in self.trading_knowledge.get("patterns", []):
-                if "bollinger" in k.lower() or "bounce" in k.lower():
-                    score += 10
-                    reasons.append("AI: Bollinger bounce pattern")
-                    break
+            reasons.append("Bollinger-ის ქვედა ხაზთან შეხება")
 
-        # 2. ბაზრის საერთო სენტიმენტი (Global Sentiment)
-        sentiment = await self.get_market_sentiment()
         if sentiment['fg_index'] < 30:
             score += 15
-            reasons.append(f"Global: High Fear ({sentiment['fg_index']}) - Buying Opportunity")
-        elif sentiment['fg_index'] > 75:
-            score -= 20 # ზედმეტი ეიფორია სახიფათოა
+            reasons.append(f"ბაზრის შიში ({sentiment['fg_index']}) - ყიდვის შანსი")
 
-        if sentiment['market_trend'] > 0:
-            score += 10
-            reasons.append(f"Global: Market Trend Bullish (+{sentiment['market_trend']:.1f}%)")
-
-        # 3. PDF ცოდნა
+        # PDF ცოდნის შემოწმება
         for p in self.trading_knowledge.get("patterns", []):
-            if "bullish" in p.lower() and "reversal" in p.lower():
-                if data['rsi'] < 35 and data['price'] > data['ema200']:
-                    score += 15
-                    reasons.append("AI: Bullish reversal pattern")
-                    break
+            if "bullish" in p.lower() and data['rsi'] < 35:
+                score += 15
+                reasons.append("AI ცოდნა: Bullish Reversal")
+                break
 
         return score, reasons
 
@@ -230,396 +193,222 @@ class AITradingBot:
             if os.path.exists(filename):
                 with open(filename, 'r') as f:
                     data = json.load(f)
-                    if filename == SUBSCRIPTIONS_FILE:
-                        return {int(k): v for k, v in data.items()}
-                    return data
+                    return {int(k): v for k, v in data.items()} if filename == SUBSCRIPTIONS_FILE else data
             return {}
-        except:
-            return {}
+        except: return {}
 
     def save_json(self, data, filename):
         try:
-            if filename == SUBSCRIPTIONS_FILE:
-                data = {str(k): v for k, v in data.items()}
-            with open(filename, 'w') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Error saving {filename}: {e}")
+            save_data = {str(k): v for k, v in data.items()} if filename == SUBSCRIPTIONS_FILE else data
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(save_data, f, indent=2, ensure_ascii=False)
+        except Exception as e: print(f"შენახვის შეცდომა {filename}: {e}")
 
     def is_active_subscriber(self, user_id):
-        if user_id not in self.subscriptions:
-            return False
-        expires_str = self.subscriptions[user_id].get('expires_at')
-        if not expires_str:
-            return False
+        if user_id not in self.subscriptions: return False
         try:
-            expires = datetime.strptime(expires_str, '%Y-%m-%d').date()
-            today = datetime.now().date()
-            return today <= expires
-        except:
-            return False
+            expires = datetime.strptime(self.subscriptions[user_id]['expires_at'], '%Y-%m-%d').date()
+            return datetime.now().date() <= expires
+        except: return False
 
     def add_subscription(self, user_id, days=30):
         expires = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
-        self.subscriptions[user_id] = {'expires_at': expires, 'activated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'plan': 'premium'}
+        self.subscriptions[user_id] = {'expires_at': expires, 'activated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         self.save_json(self.subscriptions, SUBSCRIPTIONS_FILE)
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username or "მომხმარებელი"
-        ai_info = f"🧠 AI: {len(self.trading_knowledge.get('patterns', []))} patterns" if self.trading_knowledge.get('patterns') else "🤖"
-        welcome_msg = f"👋 გამარჯობა @{username}!\n\n{ai_info} AI Trading Bot\n\n📊 მონიტორინგი:\n• {len(CRYPTO)} კრიპტოვალუტა\n• {len(STOCKS)} აქცია\n• {len(COMMODITIES)} საქონელი\n\n💰 ფასი: 150₾ / თვე\n\n📌 ბრძანებები:\n/subscribe - გამოწერა\n/mystatus - სტატუსი\n/stop - გაუქმება\n\n❓ კითხვები? https://t.me/Kagurashinakami"
-        await update.message.reply_text(welcome_msg)
+        msg = (
+            f"👋 გამარჯობა @{username}!\n\n"
+            f"🤖 AI Trading Bot მზად არის.\n"
+            f"📊 ვაკონტროლებ {len(ASSETS)} აქტივს.\n\n"
+            f"📌 ბრძანებები:\n"
+            f"/subscribe - გამოწერა (150₾)\n"
+            f"/mystatus - სტატუსის შემოწმება\n"
+            f"/stop - შეტყობინებების გათიშვა\n\n"
+            f"❓ დახმარება: @Kagurashinakami"
+        )
+        await update.message.reply_text(msg)
 
     async def cmd_subscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if self.is_active_subscriber(user_id):
-            expires = self.subscriptions[user_id]['expires_at']
-            await update.message.reply_text(f"✅ უკვე გაქვთ აქტიური subscription!\n📅 იწურება: {expires}")
+            await update.message.reply_text(f"✅ თქვენ უკვე გაქვთ აქტიური გამოწერა!\n📅 ვადა: {self.subscriptions[user_id]['expires_at']}")
             return
-        payment_msg = "💳 გამოწერის ინსტრუქცია:\n\n1️⃣ გადაიხადეთ 150₾\n🏦 ბანკი: საქართველოს ბანკი\n📋 IBAN: GE95BG0000000528102311\n👤 მიმღები: ლ.გ\n\n2️⃣ გადახდის შემდეგ:\n• გამოაგზავნეთ screenshot ამ ჩატში\n• ან პირადში: https://t.me/Kagurashinakami\n\n3️⃣ ჩვენ გავააქტიურებთ subscription-ს\n⏱️ პროცესი: 24 საათში\n\n❓ კითხვები? https://t.me/Kagurashinakami"
-        await update.message.reply_text(payment_msg)
+
+        msg = (
+            "💳 გამოწერის ინსტრუქცია:\n\n"
+            "1️⃣ გადაიხადეთ 150₾\n"
+            "🏦 ბანკი: საქართველოს ბანკი\n"
+            "📋 IBAN: GE95BG0000000528102311\n"
+            "👤 მიმღები: ლ.გ\n\n"
+            "2️⃣ გამოაგზავნეთ ჩეკის ფოტო ამ ჩატში.\n"
+            "⏱️ ადმინისტრატორი გააქტიურებს 24 საათში."
+        )
+        await update.message.reply_text(msg)
 
     async def cmd_mystatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if self.is_active_subscriber(user_id):
             expires = self.subscriptions[user_id]['expires_at']
-            days_left = (datetime.strptime(expires, '%Y-%m-%d').date() - datetime.now().date()).days
-            status_msg = f"✅ აქტიური subscription\n\n📅 იწურება: {expires}\n⏳ დარჩენილი: {days_left} დღე\n📊 სტატუსი: Active\n🧠 AI: აქტიური\n\n🤖 მიიღებთ ყველა სიგნალს!"
+            await update.message.reply_text(f"✅ სტატუსი: აქტიური\n📅 ვადა: {expires}\n🤖 AI ანალიზი ჩართულია.")
         else:
-            status_msg = "⚠️ არააქტიური subscription\n\nგააქტიურება: /subscribe"
-        await update.message.reply_text(status_msg)
+            await update.message.reply_text("⚠️ სტატუსი: არააქტიური\nგააქტიურებისთვის: /subscribe")
+
+    async def handle_payment_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        username = update.effective_user.username or "NoName"
+        self.payment_requests[str(user_id)] = {'status': 'pending', 'at': datetime.now().isoformat()}
+        self.save_json(self.payment_requests, PAYMENT_REQUESTS_FILE)
+
+        await update.message.reply_text("📸 ფოტო მიღებულია. ადმინისტრატორი განიხილავს თქვენს მოთხოვნას.")
+
+        keyboard = [[InlineKeyboardButton("✅ დადასტურება", callback_data=f"approve_{user_id}"), 
+                     InlineKeyboardButton("❌ უარყოფა", callback_data=f"reject_{user_id}")]]
+        await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, 
+                                   caption=f"🔄 გადახდის მოთხოვნა:\n👤 @{username}\n🆔 `{user_id}`", 
+                                   reply_markup=InlineKeyboardMarkup(keyboard))
+
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        if update.effective_user.id != ADMIN_ID: return
+
+        action, target_id = query.data.split("_")
+        target_id = int(target_id)
+
+        if action == "approve":
+            self.add_subscription(target_id)
+            await query.edit_message_caption("✅ გადახდა დადასტურდა. მომხმარებელი გააქტიურდა.")
+            await self.bot.send_message(target_id, "🎉 მილოცავთ! თქვენი გამოწერა გააქტიურდა 30 დღით.\n🤖 ახლა თქვენ მიიღებთ ყველა AI სიგნალს.")
+        else:
+            await query.edit_message_caption("❌ გადახდა უარყოფილია.")
+            await self.bot.send_message(target_id, "❌ თქვენი გადახდა ვერ დადასტურდა. დაუკავშირდით @Kagurashinakami")
+
+    async def cmd_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id != ADMIN_ID: return
+        await update.message.reply_text("👑 ადმინ პანელი:\n/listusers - სიის ნახვა\n/adduser [ID] - დამატება\n/botstats - სტატისტიკა")
+
+    async def cmd_adduser(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id != ADMIN_ID: return
+        try:
+            tid = int(context.args[0])
+            self.add_subscription(tid)
+            await update.message.reply_text(f"✅ მომხმარებელი {tid} დამატებულია.")
+        except: await update.message.reply_text("❌ ფორმატი: /adduser [ID]")
+
+    async def cmd_listusers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id != ADMIN_ID: return
+        msg = "👥 მომხმარებლები:\n"
+        for uid, d in self.subscriptions.items():
+            msg += f"🆔 {uid} | 📅 {d['expires_at']}\n"
+        await update.message.reply_text(msg or "სია ცარიელია")
+
+    async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id != ADMIN_ID: return
+        active = sum(1 for u in self.subscriptions if self.is_active_subscriber(u))
+        msg = f"📊 სტატისტიკა:\n✅ აქტიური: {active}\n📡 მონიტორინგი: {len(ASSETS)} აქტივი\n📈 პოზიციები: {len(self.active_positions)}"
+        await update.message.reply_text(msg)
+
+    async def fetch_data(self, symbol):
+        try:
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period="1mo", interval=INTERVAL)
+            if len(df) < 50: return None # მინიმალური მონაცემები ანალიზისთვის
+
+            close = df['Close']
+            return {
+                "price": close.iloc[-1],
+                "ema200": EMAIndicator(close, window=200 if len(close)>=200 else len(close)).ema_indicator().iloc[-1],
+                "rsi": RSIIndicator(close).rsi().iloc[-1],
+                "bb_low": BollingerBands(close).bollinger_lband().iloc[-1],
+                "bb_high": BollingerBands(close).bollinger_hband().iloc[-1]
+            }
+        except: return None
+
+    async def analyze_and_notify(self):
+        active_users = [u for u in self.subscriptions if self.is_active_subscriber(u)]
+        if not active_users: return
+
+        sentiment = await self.get_market_sentiment()
+        print(f"--- ციკლი დაიწყო: {datetime.now().strftime('%H:%M')} | F&G: {sentiment['fg_index']} ---")
+
+        for asset in ASSETS:
+            data = await self.fetch_data(asset)
+            if not data: continue
+
+            if asset in self.active_positions:
+                await self.check_exit(asset, data)
+            else:
+                score, reasons = await self.ai_analyze_signal(asset, data)
+                if score >= 50:
+                    self.active_positions[asset] = {"entry": data['price'], "time": time.time()}
+                    reason_str = "\n".join([f"• {r}" for r in reasons])
+                    msg = (
+                        f"🟢 AI ყიდვის სიგნალი: {asset}\n\n"
+                        f"💵 ფასი: ${data['price']:.2f}\n"
+                        f"📊 RSI: {data['rsi']:.1f}\n"
+                        f"🧠 AI ქულა: {score}/100\n\n"
+                        f"📌 მიზეზები:\n{reason_str}\n\n"
+                        f"🎯 მიზანი: +{TAKE_PROFIT_PERCENT}%\n"
+                        f"🛑 სტოპი: -{STOP_LOSS_PERCENT}%"
+                    )
+                    await self.broadcast(msg, asset)
+            await asyncio.sleep(ASSET_DELAY)
+
+    async def check_exit(self, asset, data):
+        entry = self.active_positions[asset]['entry']
+        curr = data['price']
+        profit = ((curr - entry) / entry) * 100
+
+        exit_now = False
+        reason = ""
+
+        if profit >= TAKE_PROFIT_PERCENT:
+            exit_now, reason = True, f"✅ Take Profit (+{profit:.2f}%)"
+        elif profit <= -STOP_LOSS_PERCENT:
+            exit_now, reason = True, f"🛑 Stop Loss ({profit:.2f}%)"
+        elif data['rsi'] > 75:
+            exit_now, reason = True, "📈 RSI გადამეტებული ყიდვა (>75)"
+
+        if exit_now:
+            msg = (
+                f"🔴 AI გაყიდვის სიგნალი: {asset}\n\n"
+                f"💰 მოგება/ზარალი: {profit:+.2f}%\n"
+                f"💵 გასვლის ფასი: ${curr:.2f}\n"
+                f"📌 მიზეზი: {reason}"
+            )
+            del self.active_positions[asset]
+            await self.broadcast(msg, asset)
+
+    async def broadcast(self, msg, asset):
+        now = time.time()
+        if now - self.last_notifications.get(asset, 0) < NOTIFICATION_COOLDOWN: return
+        self.last_notifications[asset] = now
+
+        for uid in list(self.subscriptions.keys()):
+            if self.is_active_subscriber(uid):
+                try: 
+                    await self.bot.send_message(chat_id=uid, text=msg)
+                    await asyncio.sleep(0.1)
+                except: pass
 
     async def cmd_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if user_id in self.subscriptions:
             del self.subscriptions[user_id]
             self.save_json(self.subscriptions, SUBSCRIPTIONS_FILE)
-            await update.message.reply_text("👋 subscription გაუქმებულია.\n\nმადლობა! /subscribe - ხელახალი გააქტიურება")
-        else:
-            await update.message.reply_text("ℹ️ არ გაქვთ აქტიური subscription.")
-
-    async def handle_payment_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        username = update.effective_user.username or "No username"
-        self.payment_requests[str(user_id)] = {'username': username, 'timestamp': datetime.now().isoformat(), 'status': 'pending', 'photo_id': update.message.photo[-1].file_id if update.message.photo else None}
-        self.save_json(self.payment_requests, PAYMENT_REQUESTS_FILE)
-        await update.message.reply_text("📸 გადახდის ფოტო მიღებულია!\n\nადმინისტრატორი გადაამოწმებს და გაააქტიურებს subscription-ს.\n⏱️ პროცესი: 24 საათში.\n\n❓ კითხვები? https://t.me/Kagurashinakami")
-        keyboard = [[InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"), InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        try:
-            if update.message.photo:
-                await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, caption=f"🔄 ახალი გადახდის მოთხოვნა\n\n👤 @{username}\n🆔 {user_id}\n⏰ {datetime.now().strftime('%H:%M:%S')}", reply_markup=reply_markup)
-        except Exception as e:
-            print(f"Failed to forward to admin: {e}")
-
-    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
-            await query.edit_message_text("🚫 არ გაქვთ უფლება!")
-            return
-        data = query.data
-        if data.startswith("approve_"):
-            target_user_id = int(data.split("_")[1])
-            await self.approve_payment(query, target_user_id)
-        elif data.startswith("reject_"):
-            target_user_id = int(data.split("_")[1])
-            await self.reject_payment(query, target_user_id)
-
-    async def approve_payment(self, query, user_id):
-        self.add_subscription(user_id, days=30)
-        if str(user_id) in self.payment_requests:
-            self.payment_requests[str(user_id)]['status'] = 'approved'
-            self.save_json(self.payment_requests, PAYMENT_REQUESTS_FILE)
-        await query.edit_message_text(f"✅ გადახდა დადასტურებულია!\n\n👤 {user_id}\n⏰ {datetime.now().strftime('%H:%M:%S')}\n\nSubscription გააქტიურდა 30 დღით.")
-        try:
-            await self.bot.send_message(chat_id=user_id, text="🎉 თქვენი გადახდა დადასტურდა!\n\n✅ Subscription გააქტიურდა 30 დღით.\n🤖 ახლა მიიღებთ ყველა AI სიგნალს.\n\n/mystatus - სტატუსი")
-        except:
-            pass
-
-    async def reject_payment(self, query, user_id):
-        if str(user_id) in self.payment_requests:
-            self.payment_requests[str(user_id)]['status'] = 'rejected'
-            self.save_json(self.payment_requests, PAYMENT_REQUESTS_FILE)
-        await query.edit_message_text(f"❌ გადახდა უარყოფილია\n\n👤 {user_id}\n⏰ {datetime.now().strftime('%H:%M:%S')}")
-        try:
-            await self.bot.send_message(chat_id=user_id, text="❌ თქვენი გადახდა უარყოფილია\n\nდაუკავშირდით: https://t.me/Kagurashinakami")
-        except:
-            pass
-
-    async def cmd_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
-            await update.message.reply_text("🚫 არ გაქვთ უფლება!")
-            return
-        ai_stats = f"• ნიმუშები: {len(self.trading_knowledge.get('patterns', []))}\n• სტრატეგიები: {len(self.trading_knowledge.get('strategies', []))}" if self.trading_knowledge else "• AI არ არის ჩატვირთული"
-        admin_msg = f"👑 ადმინის პანელი\n\n📋 ბრძანებები:\n/adduser [ID] [დღეები] - ახალი user\n/listusers - ყველა user\n/botstats - სტატისტიკა\n\n🧠 AI სტატუსი:\n{ai_stats}\n\n💳 გადახდის ფოტოებზე:\nგამოიყენეთ ღილაკები"
-        await update.message.reply_text(admin_msg)
-
-    async def cmd_adduser(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
-            await update.message.reply_text("🚫 არ გაქვთ უფლება!")
-            return
-        try:
-            if len(context.args) < 1:
-                await update.message.reply_text("❌ ფორმატი: /adduser [ID] [დღეები=30]")
-                return
-            target_id = int(context.args[0])
-            days = int(context.args[1]) if len(context.args) > 1 else 30
-            self.add_subscription(target_id, days)
-            await update.message.reply_text(f"✅ მომხმარებელი დაემატა!\n🆔 {target_id}\n📅 {days} დღე")
-        except Exception as e:
-            await update.message.reply_text(f"❌ შეცდომა: {e}")
-
-    async def cmd_listusers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
-            await update.message.reply_text("🚫 არ გაქვთ უფლება!")
-            return
-        if not self.subscriptions:
-            await update.message.reply_text("ℹ️ არ არის მომხმარებლები.")
-            return
-        users_list = "📋 ყველა მომხმარებელი:\n\n"
-        active_count = 0
-        for uid, data in self.subscriptions.items():
-            if self.is_active_subscriber(uid):
-                status = "✅ აქტიური"
-                active_count += 1
-            else:
-                status = "❌ არააქტიური"
-            expires = data.get('expires_at', 'N/A')
-            users_list += f"🆔 {uid}: {status}\n📅 {expires}\n\n"
-        users_list += f"👥 სულ: {len(self.subscriptions)}\n✅ აქტიური: {active_count}\n💰 შემოსავალი: {active_count * 150}₾/თვე"
-        await update.message.reply_text(users_list)
-
-    async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if user_id != ADMIN_ID:
-            await update.message.reply_text("🚫 არ გაქვთ უფლება!")
-            return
-        active_users = sum(1 for uid in self.subscriptions if self.is_active_subscriber(uid))
-        pending_payments = sum(1 for req in self.payment_requests.values() if req.get('status') == 'pending')
-        ai_info = f"🧠 AI ცოდნა:\n• ნიმუშები: {len(self.trading_knowledge.get('patterns', []))}\n• სტრატეგიები: {len(self.trading_knowledge.get('strategies', []))}\n\n" if self.trading_knowledge.get('patterns') else ""
-        stats_msg = f"📊 ბოტის სტატისტიკა\n\n👥 მომხმარებლები: {len(self.subscriptions)}\n✅ აქტიური: {active_users}\n💳 გადახდის მოთხოვნები: {pending_payments}\n📈 აქტიური პოზიციები: {len(self.active_positions)}\n📡 მონიტორინგი: {len(ASSETS)} აქტივი\n⏱️ ციკლი: ~{len(ASSETS) * ASSET_DELAY / 60:.1f}წთ\n\n{ai_info}💰 შემოსავალი: {active_users * 150}₾/თვე"
-        await update.message.reply_text(stats_msg)
-
-    def get_asset_type(self, symbol):
-        if symbol in CRYPTO:
-            return "💎 CRYPTO"
-        elif symbol in STOCKS:
-            return "📈 STOCK"
-        elif symbol in COMMODITIES:
-            return "🏆 COMMODITY"
-        return "📊 ASSET"
-
-    async def get_comprehensive_news(self, asset_name):
-        negative_impact = 0
-        keywords = ['crash', 'hacked', 'scam', 'fraud', 'lawsuit', 'bankruptcy', 'bearish', 'plunge', 'collapse', 'ban']
-        for url in RSS_FEEDS:
-            try:
-                feed = feedparser.parse(url)
-                for entry in feed.entries[:5]:
-                    title = entry.get('title', '').lower()
-                    summary = entry.get('summary', '').lower()
-                    content = title + ' ' + summary
-                    if asset_name.lower() in content:
-                        if any(word in content for word in keywords):
-                            negative_impact += 1
-            except:
-                continue
-        return negative_impact == 0
-
-    async def fetch_data(self, symbol):
-        try:
-            self.request_count += 1
-            if self.request_count > 50 and (time.time() - self.start_time) < 60:
-                await asyncio.sleep(10)
-                self.request_count = 0
-                self.start_time = time.time()
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period="1mo", interval=INTERVAL)
-            if len(df) < 200:
-                return None
-            close = df['Close']
-            ema200 = EMAIndicator(close, window=200).ema_indicator().iloc[-1]
-            rsi = RSIIndicator(close, window=14).rsi().iloc[-1]
-            bb = BollingerBands(close, window=20, window_dev=2)
-            return {"price": close.iloc[-1], "ema200": ema200, "rsi": rsi, "bb_low": bb.bollinger_lband().iloc[-1], "bb_high": bb.bollinger_hband().iloc[-1]}
-        except Exception as e:
-            print(f"Error {symbol}: {e}")
-            return None
-
-    async def analyze_and_notify(self):
-        active_count = sum(1 for uid in self.subscriptions if self.is_active_subscriber(uid))
-        if active_count == 0:
-            print("⏸️ No subscribers - scanning paused")
-            return
-
-        # მივიღოთ ბაზრის გლობალური სენტიმენტი ყოველი ციკლის დასაწყისში
-        sentiment_data = await self.get_market_sentiment()
-        print(f"\n🧠 AI Scan: {len(ASSETS)} assets | Fear&Greed: {sentiment_data['fg_index']} ({sentiment_data['fg_class']})")
-
-        for asset in ASSETS:
-            data = await self.fetch_data(asset)
-            if not data:
-                await asyncio.sleep(ASSET_DELAY)
-                continue
-            if asset in self.active_positions:
-                await self.check_exit_conditions(asset, data)
-            else:
-                ai_score, ai_reasons = await self.ai_analyze_signal(asset, data)
-                if ai_score >= 50:
-                    is_clean = await self.get_comprehensive_news(asset)
-                    if is_clean:
-                        self.active_positions[asset] = {"entry_price": data['price'], "entry_time": time.time()}
-                        asset_type = self.get_asset_type(asset)
-                        reasons_text = "\n".join([f"• {r}" for r in ai_reasons[:5]])
-                        msg = (
-                            f"🟢 AI იყიდე: {asset} [{asset_type}]\n\n"
-                            f"💵 ფასი: ${data['price']:.2f}\n"
-                            f"📊 RSI: {data['rsi']:.1f}\n"
-                            f"📈 EMA200: ${data['ema200']:.2f}\n"
-                            f"🧠 AI Score: {ai_score}/100\n"
-                            f"📊 Fear&Greed: {sentiment_data['fg_index']} ({sentiment_data['fg_class']})\n\n"
-                            f"📌 AI მიზეზები:\n{reasons_text}\n\n"
-                            f"🎯 Risk:\n🔴 Stop-Loss: -{STOP_LOSS_PERCENT}%\n"
-                            f"🟢 Take-Profit: +{TAKE_PROFIT_PERCENT}%"
-                        )
-                        await self.broadcast_signal(msg, asset)
-            await asyncio.sleep(ASSET_DELAY)
-        print(f"Cycle complete")
-
-    async def check_exit_conditions(self, asset, data):
-        position = self.active_positions[asset]
-        entry_price = position['entry_price']
-        current_price = data['price']
-        profit_percent = ((current_price - entry_price) / entry_price) * 100
-        hours_held = (time.time() - position['entry_time']) / 3600
-
-        should_exit = False
-        exit_reason = ""
-
-        if profit_percent <= -STOP_LOSS_PERCENT:
-            should_exit = True
-            exit_reason = f"🔴 STOP-LOSS (-{abs(profit_percent):.2f}%)"
-
-        if not should_exit and profit_percent >= TAKE_PROFIT_PERCENT:
-            should_exit = True
-            exit_reason = f"🟢 TAKE-PROFIT (+{profit_percent:.2f}%)"
-
-        elif not should_exit and profit_percent < -3 and data["rsi"] < 30:
-            should_exit = True
-            exit_reason = f"⚠️ გადაჭარბებული ვარდნა (-{abs(profit_percent):.2f}%, RSI: {data['rsi']:.1f})"
-
-        elif not should_exit and hours_held >= MAX_HOLD_HOURS:
-            should_exit = True
-            exit_reason = f"⏰ დროის ლიმიტი ({MAX_HOLD_HOURS}ს)"
-
-        elif not should_exit and data["rsi"] > 70:
-            should_exit = True
-            exit_reason = "📈 RSI ძალიან overbought (>70)"
-
-        elif not should_exit and data["price"] >= data["bb_high"] and data["rsi"] > 60:
-            should_exit = True
-            exit_reason = "📈 ბოლინჯერი + RSI (გაყიდვის სიგნალი)"
-
-        if not should_exit:
-            for k in self.trading_knowledge.get("patterns", []):
-                if "bearish" in k.lower() and "reversal" in k.lower():
-                    if data["rsi"] > 65:
-                        should_exit = True
-                        exit_reason = "🧠 AI: Bearish reversal pattern"
-                        break
-
-        if not should_exit and profit_percent > 15:
-            trailing_stop = entry_price * 1.10
-            if current_price < trailing_stop:
-                should_exit = True
-                exit_reason = "📊 Trailing stop (10% from peak)"
-
-        if should_exit:
-            balance_1usd = 1.0 * (1 + (profit_percent / 100))
-            asset_type = self.get_asset_type(asset)
-            emoji = "🔴" if profit_percent < 0 else "🟢"
-
-            msg = (
-                f"{emoji} გაყიდე: {asset} [{asset_type}]\n\n"
-                f"📊 შესვლა: ${entry_price:.2f}\n"
-                f"📊 გასვლა: ${current_price:.2f}\n"
-                f"💰 მოგება: {profit_percent:+.2f}%\n"
-                f"💵 1$-ის ბალანსი: ${balance_1usd:.4f}\n\n"
-                f"📌 მიზეზი: {exit_reason}"
-            )
-
-            del self.active_positions[asset]
-            await self.broadcast_signal(msg, asset)
-            print(f"SELL signal - profit: {profit_percent:.2f}%")
-
-    async def broadcast_signal(self, message, asset):
-        now = time.time()
-        if now - self.last_notifications.get(asset, 0) < NOTIFICATION_COOLDOWN:
-            return
-
-        self.last_notifications[asset] = now
-        success_count = 0
-        failed_count = 0
-
-        for user_id in list(self.subscriptions.keys()):
-            if not self.is_active_subscriber(user_id):
-                continue
-            try:
-                await self.bot.send_message(chat_id=user_id, text=message)
-                success_count += 1
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                failed_count += 1
-                print(f"Failed to send to {user_id}: {e}")
-
-        print(f"Broadcast: {success_count} sent, {failed_count} failed")
+            await update.message.reply_text("👋 შეტყობინებები გაუქმებულია. დაბრუნებისთვის გამოიყენეთ /subscribe")
 
     async def start(self):
         await self.application.initialize()
         await self.application.start()
         await self.application.updater.start_polling()
-
-        ai_info = (
-            f"{len(self.trading_knowledge.get('patterns', []))} patterns"
-            if self.trading_knowledge.get("patterns")
-            else "base"
-        )
-
-        startup_msg = (
-            "💎 AI Trading Bot active\n"
-            f"🧠 AI: {ai_info}\n\n"
-            "📊 Monitoring:\n"
-            f"🔸 {len(CRYPTO)} crypto\n"
-            f"🔸 {len(STOCKS)} stocks\n"
-            f"🔸 {len(COMMODITIES)} commodities\n"
-            "━━━━━━━━━━━━━━━━\n"
-            f"📡 Total: {len(ASSETS)} assets\n"
-            f"⏱️ Cycle: ~{len(ASSETS) * ASSET_DELAY / 60:.0f}min\n"
-            f"👥 Subscribers: {len(self.subscriptions)}\n\n"
-            "🚀 AI-powered analysis active!"
-        )
-
-        for user_id in self.subscriptions:
-            try:
-                await self.bot.send_message(chat_id=user_id, text=startup_msg)
-            except:
-                pass
-
-        print(startup_msg)
-        print("\n" + "=" * 50 + "\n")
+        print("🚀 ბოტი გაშვებულია!")
 
         while True:
             await self.analyze_and_notify()
-            print(f"Pause {SCAN_INTERVAL}s...\n")
             await asyncio.sleep(SCAN_INTERVAL)
 
-
 if __name__ == "__main__":
-    print("🚀 AI Trading Bot starting...\n")
     bot = AITradingBot()
     asyncio.run(bot.start())
