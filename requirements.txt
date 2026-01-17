@@ -1,8 +1,8 @@
 python-telegram-bot==20.3
-yfinance
 feedparser
 ta
 PyPDF2
 requests
 pandas
 numpy
+yfinance>=0.2.40
