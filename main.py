@@ -16,7 +16,7 @@ try:
 except ImportError:
     print("PyPDF2 not installed - PDF features disabled")
 
-TELEGRAM_TOKEN = "8247808058:AAG9ZxIatcq7vGfgn10EWxvW5NYgInB8ok8"
+TELEGRAM_TOKEN = "8247808058:AAGBsRWw8UOoZHMoulK6dGv-QI5L6A9f9rA"
 ADMIN_ID = 6564836899
 SUBSCRIPTIONS_FILE = "subscriptions.json"
 PAYMENT_REQUESTS_FILE = "payment_requests.json"
