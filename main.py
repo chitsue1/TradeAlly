@@ -352,6 +352,77 @@ class AITradingBot:
             index = text.lower().find(keyword)
             if index == -1:
                 return None
+
+    async def fetch_data_coingecko(self, symbol):
+        """Fallback data source using CoinGecko API"""
+        try:
+            # Only for crypto
+            if symbol not in CRYPTO:
+                return None
+
+            # Convert symbol to CoinGecko ID
+            coin_id = symbol.replace("-USD", "").lower()
+            coin_map = {
+                "btc": "bitcoin",
+                "eth": "ethereum",
+                "bnb": "binancecoin",
+                "sol": "solana",
+                "xrp": "ripple",
+                "ada": "cardano",
+                "doge": "dogecoin",
+                "dot": "polkadot",
+                "link": "chainlink",
+                "avax": "avalanche-2",
+                "shib": "shiba-inu",
+                "ltc": "litecoin",
+                "bch": "bitcoin-cash",
+                "uni": "uniswap",
+                "near": "near",
+                "icp": "internet-computer",
+                "hbar": "hedera-hashgraph",
+                "arb": "arbitrum",
+                "op": "optimism"
+            }
+
+            coin_id = coin_map.get(coin_id, coin_id)
+
+            async with aiohttp.ClientSession() as session:
+                url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+                params = {"vs_currency": "usd", "days": "30", "interval": "hourly"}
+
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                    if response.status != 200:
+                        logger.error(f"CoinGecko error {symbol}: {response.status}")
+                        return None
+
+                    data = await response.json()
+                    prices = [p[1] for p in data['prices']]
+
+                    if len(prices) < 200:
+                        return None
+
+                    # Calculate indicators manually
+                    import pandas as pd
+                    df = pd.DataFrame({'Close': prices})
+
+                    close = df['Close']
+                    ema200 = EMAIndicator(close, window=200).ema_indicator().iloc[-1]
+                    rsi = RSIIndicator(close, window=14).rsi().iloc[-1]
+                    bb = BollingerBands(close, window=20, window_dev=2)
+
+                    logger.info(f"✅ CoinGecko data fetched: {symbol}")
+
+                    return {
+                        "price": close.iloc[-1],
+                        "ema200": ema200,
+                        "rsi": rsi,
+                        "bb_low": bb.bollinger_lband().iloc[-1],
+                        "bb_high": bb.bollinger_hband().iloc[-1],
+                        "volume": 0
+                    }
+
+        except Exception as e:
+            logger.error(f"CoinGecko fetch error {symbol}: {e}")
             start = max(0, index - chars // 2)
             end = min(len(text), index + chars // 2)
             return text[start:end].strip()
