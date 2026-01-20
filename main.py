@@ -1,3 +1,8 @@
+"""
+AI Trading Bot - Main Entry Point
+ძმაკაცო, აქ ყველაფერი ერთად უერთდება! 🚀
+"""
+
 import asyncio
 import logging
 import os
@@ -41,11 +46,16 @@ class AITradingBot:
             return
 
         # Get sentiment once per cycle
-        sentiment_data = await self.trading_engine.get_market_sentiment()
-        logger.info(
-            f"\n🧠 AI სკანირება: {len(CRYPTO)} crypto | "
-            f"Fear&Greed: {sentiment_data['fg_index']} ({sentiment_data['fg_class']})"
-        )
+        try:
+            sentiment_data = await self.trading_engine.get_market_sentiment()
+            logger.info(
+                f"\n🧠 AI სკანირება: {len(CRYPTO)} crypto | "
+                f"Fear&Greed: {sentiment_data['fg_index']} ({sentiment_data['fg_class']})"
+            )
+        except Exception as e:
+            logger.error(f"Sentiment fetch error: {e}")
+            # Default fallback sentiment
+            sentiment_data = {"fg_index": 50, "fg_class": "ნეიტრალური", "market_trend": 0}
 
         # Scan only CRYPTO
         scanned = 0
@@ -58,7 +68,7 @@ class AITradingBot:
 
                 if not data:
                     errors += 1
-                    if errors > 5:  # თუ ბევრი შეცდომაა - გააჩერე
+                    if errors > 5:
                         logger.warning("⚠️ ბევრი შეცდომა - 30s დაყოვნება")
                         await asyncio.sleep(30)
                         errors = 0
@@ -89,7 +99,11 @@ class AITradingBot:
                 await asyncio.sleep(ASSET_DELAY)
 
             except IndexError as e:
-                logger.error(f"Index error {asset}: {e} - გამოტოვება")
+                logger.error(f"Index error {asset}: {e}")
+                errors += 1
+                continue
+            except KeyError as e:
+                logger.error(f"Key error {asset}: {e}")
                 errors += 1
                 continue
             except Exception as e:
@@ -192,14 +206,14 @@ class AITradingBot:
                         break
 
         # 5. Trailing stop
-        if not should_exit and profit_percent > 15:
+        elif not should_exit and profit_percent > 15:
             trailing_stop = entry_price * 1.12
             if current_price < trailing_stop:
                 should_exit = True
                 exit_reason = f"📊 Trailing Stop (+{profit_percent:.2f}%)"
 
         # 6. Extreme greed
-        if not should_exit and sentiment['fg_index'] > 85 and profit_percent > 5:
+        elif not should_exit and sentiment['fg_index'] > 85 and profit_percent > 5:
             should_exit = True
             exit_reason = f"🚨 ექსტრემალური სიხარბე ({sentiment['fg_index']})"
 
@@ -296,14 +310,17 @@ class AITradingBot:
         except Exception as e:
             logger.error(f"🚨 კრიტიკული შეცდომა: {e}")
             raise
+        finally:
+            # Cleanup resources
+            await self.trading_engine.cleanup()
 
 
 async def main():
     """Entry point"""
     print("""
     ╔══════════════════════════════════════╗
-    ║    🤖 AI Trading Bot v2.0            ║
-    ║    Made with ❤️ by AI                ║
+    ║   🤖 AI Trading Bot v2.0            ║
+    ║   Made with ❤️ by Claude            ║
     ╚══════════════════════════════════════╝
     """)
 
@@ -318,8 +335,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n👋 ნახვამდის!")
     except Exception as e:
-        if 'logger' in globals():
-            logger.error(f"🚨 Fatal error: {e}")
-        else:
-            print(f"🚨 Fatal error: {e}")
+        logger.error(f"🚨 Fatal error: {e}")
         sys.exit(1)
