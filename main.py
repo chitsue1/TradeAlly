@@ -1,6 +1,5 @@
 """
 AI Trading Bot - Main Entry Point (Twelve Data Optimized)
-ძმაკაცო, ახლა ეს კოდი სრულად "ხედავს" ბაზარს! 🚀
 """
 
 import asyncio
@@ -30,7 +29,6 @@ class AITradingBot:
 
         # ყველა აქტივის გაერთიანება ერთ სიაში სკანირებისთვის
         self.all_assets = CRYPTO + STOCKS + COMMODITIES
-
         logger.info(f"✅ ჩატვირთულია {len(self.all_assets)} აქტივი მონიტორინგისთვის")
 
     async def analyze_and_notify(self):
@@ -41,15 +39,11 @@ class AITradingBot:
             logger.info("⏸️ არ არის აქტიური გამომწერები - სკანირება შეჩერებულია")
             return
 
-        try:
-            sentiment_data = await self.trading_engine.get_market_sentiment()
-            logger.info(
-                f"\n🧠 AI სკანირება იწყება: {len(self.all_assets)} აქტივი | "
-                f"Fear&Greed: {sentiment_data['fg_index']}"
-            )
-        except Exception as e:
-            logger.error(f"Sentiment fetch error: {e}")
-            sentiment_data = {"fg_index": 50, "fg_class": "ნეიტრალური", "market_trend": 0}
+        # სენტიმენტის ლოგიკის გასწორება - რადგან TradingEngine-ში ეს ფუნქცია არ გაქვს
+        # ვიყენებთ სტანდარტულ მნიშვნელობებს, რომ კოდი არ გაჩერდეს
+        sentiment_data = {"fg_index": 50, "fg_class": "ნეიტრალური", "market_trend": 0}
+
+        logger.info(f"\n🧠 AI სკანირება იწყება: {len(self.all_assets)} აქტივი")
 
         scanned = 0
         errors = 0
@@ -61,7 +55,7 @@ class AITradingBot:
 
                 if not data:
                     errors += 1
-                    await asyncio.sleep(ASSET_DELAY) # ლიმიტის დაცვა შეცდომის დროსაც
+                    await asyncio.sleep(ASSET_DELAY)
                     continue
 
                 scanned += 1
@@ -83,7 +77,7 @@ class AITradingBot:
                         else:
                             logger.info(f"📰 უარყოფითი სიახლეები, გამოტოვება: {asset}")
 
-                # 4. კრიტიკული დაყოვნება Twelve Data-ს 8 მოთხოვნა/წთ ლიმიტისთვის
+                # 4. კრიტიკული დაყოვნება Twelve Data-ს ლიმიტისთვის
                 await asyncio.sleep(ASSET_DELAY)
 
             except Exception as e:
@@ -91,7 +85,7 @@ class AITradingBot:
                 errors += 1
                 await asyncio.sleep(ASSET_DELAY)
 
-        logger.info(f"✅ ციკლი დასრულდა - სკანირებული: {scanned}/{len(self.all_assets)} - პაუზა {SCAN_INTERVAL}s")
+        logger.info(f"✅ ციკლი დასრულდა - სკანირებული: {scanned}/{len(self.all_assets)}")
 
     async def create_buy_signal(self, asset, data, sentiment, ai_score, ai_reasons):
         """სიგნალის შექმნა და დაგზავნა"""
@@ -168,9 +162,9 @@ class AITradingBot:
             f"📊 მონიტორინგი: {len(self.all_assets)} აქტივი\n"
             f"⏱️ ციკლი: ~{(len(self.all_assets) * ASSET_DELAY) / 60:.1f} წუთი"
         )
-        for user_id in self.telegram_handler.subscriptions.keys():
-            try: await self.telegram_handler.bot.send_message(chat_id=user_id, text=startup_msg)
-            except: pass
+        # ვაგზავნით მხოლოდ ადმინთან საწყის მესიჯს, რომ იუზერები არ დავაფრთხოთ რესტარტზე
+        try: await self.telegram_handler.bot.send_message(chat_id=ADMIN_ID, text=startup_msg)
+        except: pass
         logger.info(startup_msg)
 
     async def run(self):
