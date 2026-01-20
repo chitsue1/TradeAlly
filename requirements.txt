@@ -5,30 +5,3 @@ ta==0.11.0
 PyPDF2==3.0.1
 feedparser==6.0.11
 twelvedata>=1.2.10
-```
-
-**არაფერი მეტი არ სჭირდება!** Binance და Yahoo **API key-ის გარეშე** მუშაობენ.
-
-### 3️⃣ **Redeploy Railway**
-
----
-
-## 📊 **რას უნდა დაინახო (5 წუთში):**
-```
-🔍 Trying binance for BTC/USD
-✅ BTC/USD fetched from binance
-
-🔍 Trying yahoo for AAPL
-✅ AAPL fetched from yahoo
-
-============================================================
-✅ SCAN CYCLE COMPLETE
-⏱️ Duration: 10.5 minutes
-📊 Success: 42/42 (100%)  ← ეს უნდა დაინახო!
-❌ Failed: 0/42
-
-📈 Provider Statistics:
-   binance    :  16 OK,   0 FAIL (100%)  ← კრიპტო
-   yahoo      :  26 OK,   0 FAIL (100%)  ← აქციები
-   Cache size: 42
-============================================================
