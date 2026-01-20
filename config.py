@@ -1,5 +1,5 @@
 """
-AI Trading Bot - Configuration (Twelve Data Optimized)
+AI Trading Bot - Configuration (Multi-Source Optimized)
 """
 
 # ========================
@@ -11,7 +11,14 @@ ADMIN_ID = 6564836899
 # ========================
 # API KEYS & PROVIDERS
 # ========================
+# Primary provider (fallback)
 TWELVE_DATA_API_KEY = "c512e8ccb9ae4637a613152481546749"
+
+# Optional providers (leave None if not using)
+ALPACA_API_KEY = None  # Get free key at: https://alpaca.markets
+ALPACA_SECRET_KEY = None
+
+# Note: Binance and Yahoo Finance don't require API keys for public market data
 
 # ========================
 # FILE PATHS
@@ -23,9 +30,9 @@ CACHE_FILE = "market_cache.json"
 PDF_FOLDER = "My-AI-Agent_needs"
 
 # ========================
-# TRADING ASSETS (Twelve Data Format)
+# TRADING ASSETS
 # ========================
-# კრიპტო: Twelve Data იყენებს ფორმატს "BTC/USD"
+# Crypto assets (multi-source compatible format)
 CRYPTO = [
     "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD",
     "ADA/USD", "DOGE/USD", "DOT/USD", "LINK/USD",
@@ -33,40 +40,50 @@ CRYPTO = [
     "NEAR/USD", "ICP/USD", "HBAR/USD"
 ]
 
-# აქციები: ჩვეულებრივი სიმბოლოები
+# Stock assets
 STOCKS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "V", "JPM", "MA", "PG", "HD", "NFLX", "ADBE", "AMD","TSM", "ASML", "SNOW", "SQ", "PYPL", "XOM", "COST", "CAT"
+    "V", "JPM", "MA", "PG", "HD", "NFLX", "ADBE", "AMD",
+    "TSM", "ASML", "SNOW", "SQ", "PYPL", "XOM", "COST", "CAT"
 ]
 
-# საქონელი: Twelve Data-ს ფორმატი
+# Commodities
 COMMODITIES = [
     "GOLD", "SILVER", "WTI"
 ]
 
 # ========================
-# TRADING PARAMETERS (Twelve Data Limits)
+# TRADING PARAMETERS (OPTIMIZED FOR 30-MIN CYCLES)
 # ========================
 INTERVAL = "1h"
 
-# რადგან ლიმიტი არის 8 მოთხოვნა/წუთში, სკანირების ინტერვალი უნდა იყოს გონივრული.
-# 15 წუთი (900 წამი) იდეალურია, რომ ბოტმა მშვიდად დაასრულოს ციკლი.
-SCAN_INTERVAL = 900  
+# ✅ NEW: 30-minute full scan cycle (instead of 7 minutes)
+# Total assets: ~43 (16 crypto + 24 stocks + 3 commodities)
+# Cycle time: 1800 seconds (30 minutes)
+# Delay per asset: 1800 / 43 ≈ 42 seconds
+SCAN_INTERVAL = 1800  # Full cycle: 30 minutes
 
-# ASSET_DELAY - ყველაზე მნიშვნელოვანი პარამეტრი!
-# 60 წამი / 8 მოთხოვნა = 7.5 წამი. 
-# ჩვენ ავიღებთ 10 წამს, რომ API-მ არასდროს დაგვიბლოკოს წვდომა.
-ASSET_DELAY = 10  
+# ✅ NEW: Smart delay between assets
+# With multi-source fallback, we don't need aggressive delays
+# 15 seconds is enough for smooth distribution
+ASSET_DELAY = 15  # Delay between each asset fetch
 
-NOTIFICATION_COOLDOWN = 7200  
+# Notification settings
+NOTIFICATION_COOLDOWN = 7200  # Don't spam same signal within 2 hours
 STOP_LOSS_PERCENT = 5.0
 TAKE_PROFIT_PERCENT = 10.0
 MAX_HOLD_HOURS = 72
 
 # ========================
-# API RATE LIMITS (Twelve Data Free Plan)
+# RATE LIMITS (Per Source - Handled by MultiSourceDataProvider)
 # ========================
-# მკაცრი ლიმიტები უფასო პაკეტისთვის
+# These are now managed internally by market_data.py
+# Binance: 1200 requests/minute (weight system)
+# Alpaca: 200 requests/minute
+# Yahoo: ~2000 requests/hour
+# TwelveData: 8 requests/minute (free tier)
+
+# Legacy (kept for backwards compatibility, not used)
 MAX_TD_REQUESTS_PER_MINUTE = 8
 MAX_TD_REQUESTS_PER_DAY = 800
 
@@ -82,7 +99,7 @@ AI_CONFIDENCE_LOW = 40
 # ========================
 WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
 
-🚀 AI Trading Bot (Powered by Twelve Data)
+🚀 AI Trading Bot (Multi-Source Data Provider)
 
 📊 მონიტორინგი:
 • {crypto_count} კრიპტოვალუტა
@@ -110,6 +127,7 @@ BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{asset_type}]
 📊 RSI: {rsi:.1f}
 📈 EMA200: ${ema200:.2f}
 🧠 AI Score: {ai_score}/100
+🔌 წყარო: {data_source}
 
 📌 AI ანალიზი:
 {reasons}

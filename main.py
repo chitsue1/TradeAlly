@@ -39,11 +39,9 @@ class AITradingBot:
             logger.info("⏸️ არ არის აქტიური გამომწერები - სკანირება შეჩერებულია")
             return
 
-        # სენტიმენტის ლოგიკის გასწორება - რადგან TradingEngine-ში ეს ფუნქცია არ გაქვს
-        # ვიყენებთ სტანდარტულ მნიშვნელობებს, რომ კოდი არ გაჩერდეს
-        sentiment_data = {"fg_index": 50, "fg_class": "ნეიტრალური", "market_trend": 0}
+        sentiment_data = await self.trading_engine.get_market_sentiment()
 
-        logger.info(f"\n🧠 AI სკანირება იწყება: {len(self.all_assets)} აქტივი")
+        logger.info(f"\n🧠 AI სკანირება იწყება: {len(self.all_assets)} აქტივი | Fear&Greed: {sentiment_data['fg_index']}")
 
         scanned = 0
         errors = 0
@@ -162,7 +160,6 @@ class AITradingBot:
             f"📊 მონიტორინგი: {len(self.all_assets)} აქტივი\n"
             f"⏱️ ციკლი: ~{(len(self.all_assets) * ASSET_DELAY) / 60:.1f} წუთი"
         )
-        # ვაგზავნით მხოლოდ ადმინთან საწყის მესიჯს, რომ იუზერები არ დავაფრთხოთ რესტარტზე
         try: await self.telegram_handler.bot.send_message(chat_id=ADMIN_ID, text=startup_msg)
         except: pass
         logger.info(startup_msg)
@@ -176,8 +173,6 @@ class AITradingBot:
                 await asyncio.sleep(SCAN_INTERVAL)
         except Exception as e:
             logger.error(f"🚨 კრიტიკული შეცდომა: {e}")
-        finally:
-            await self.trading_engine.cleanup()
 
 async def main():
     bot = AITradingBot()
