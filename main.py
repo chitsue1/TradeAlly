@@ -1,6 +1,6 @@
 """
 AI Trading Bot - Main Entry Point (Production-Ready)
-Fixed: Async orchestration, error handling, Railway compatibility
+Fixed: Correct initialization order for TelegramHandler dependency
 """
 
 import asyncio
@@ -40,29 +40,35 @@ def signal_handler(signum, frame):
 # ========================
 async def main():
     """
-    Production-grade async orchestration
+    Production-grade async orchestration with correct dependency injection
 
     Architecture:
-    - Telegram bot runs in background task
-    - Trading engine runs in background task
-    - Both tasks monitored and restarted on failure
-    - Graceful shutdown on SIGTERM (Railway compatibility)
+    1. Create TradingEngine first
+    2. Pass it to TelegramHandler (dependency injection)
+    3. Run both in parallel
     """
 
     logger.info("🚀 AI Trading Bot ინიციალიზაცია...")
 
-    # Initialize components
+    # ✅ STEP 1: Initialize TradingEngine first
     try:
-        telegram_handler = TelegramHandler()
         trading_engine = TradingEngine()
-
-        # Count assets
-        all_assets = CRYPTO + STOCKS + COMMODITIES
-        logger.info(f"✅ ჩატვირთულია {len(all_assets)} აქტივი მონიტორინგისთვის")
-
+        logger.info("✅ Trading Engine initialized")
     except Exception as e:
-        logger.error(f"❌ Initialization failed: {e}")
+        logger.error(f"❌ TradingEngine initialization failed: {e}")
         return
+
+    # ✅ STEP 2: Initialize TelegramHandler with engine dependency
+    try:
+        telegram_handler = TelegramHandler(trading_engine)
+        logger.info("✅ Telegram Handler initialized")
+    except Exception as e:
+        logger.error(f"❌ TelegramHandler initialization failed: {e}")
+        return
+
+    # Count assets
+    all_assets = CRYPTO + STOCKS + COMMODITIES
+    logger.info(f"✅ ჩატვირთულია {len(all_assets)} აქტივი მონიტორინგისთვის")
 
     # ========================
     # BACKGROUND TASKS
@@ -82,7 +88,7 @@ async def main():
                 retry_count += 1
 
                 if retry_count < max_retries:
-                    await asyncio.sleep(30)  # Wait before retry
+                    await asyncio.sleep(30)
 
             except Exception as e:
                 retry_count += 1
@@ -91,7 +97,8 @@ async def main():
                 if retry_count < max_retries:
                     await asyncio.sleep(30)
 
-        logger.error(f"🚨 Telegram handler failed after {max_retries} retries")
+        if retry_count >= max_retries:
+            logger.error(f"🚨 Telegram handler failed after {max_retries} retries")
 
     async def run_trading_engine():
         """Trading engine wrapper with auto-restart"""
@@ -108,7 +115,7 @@ async def main():
                 retry_count += 1
 
                 if retry_count < max_retries:
-                    await asyncio.sleep(60)  # Wait before retry
+                    await asyncio.sleep(60)
 
             except Exception as e:
                 retry_count += 1
@@ -117,8 +124,9 @@ async def main():
                 if retry_count < max_retries:
                     await asyncio.sleep(60)
 
-        logger.error(f"🚨 Trading engine failed after {max_retries} retries")
-        shutdown_event.set()  # Shutdown everything if engine dies
+        if retry_count >= max_retries:
+            logger.error(f"🚨 Trading engine failed after {max_retries} retries")
+            shutdown_event.set()
 
     async def monitor_shutdown():
         """Wait for shutdown signal"""
@@ -143,12 +151,12 @@ async def main():
 ╚════════════════════════════════════════╝
         """)
 
-        # ✅ KEY FIX: Run both tasks concurrently (not sequentially)
+        # ✅ Run both tasks concurrently
         await asyncio.gather(
             run_telegram(),
             run_trading_engine(),
             monitor_shutdown(),
-            return_exceptions=True  # Don't crash if one fails
+            return_exceptions=True
         )
 
     except KeyboardInterrupt:
