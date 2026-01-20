@@ -1,182 +1,188 @@
 """
-AI Trading Bot - Main Entry Point (Twelve Data Optimized)
+AI Trading Bot - Main Entry Point (Production-Ready)
+Fixed: Async orchestration, error handling, Railway compatibility
 """
 
 import asyncio
 import logging
-import os
+import signal
 import sys
 from datetime import datetime
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 from config import *
 from trading_engine import TradingEngine
 from telegram_handler import TelegramHandler
 
-class AITradingBot:
-    def __init__(self):
-        logger.info("🚀 AI Trading Bot ინიციალიზაცია...")
-        os.makedirs(PDF_FOLDER, exist_ok=True)
+# ========================
+# LOGGING SETUP
+# ========================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
-        self.trading_engine = TradingEngine()
-        self.telegram_handler = TelegramHandler(self.trading_engine)
+# ========================
+# GLOBAL STATE
+# ========================
+shutdown_event = asyncio.Event()
 
-        # ყველა აქტივის გაერთიანება ერთ სიაში სკანირებისთვის
-        self.all_assets = CRYPTO + STOCKS + COMMODITIES
-        logger.info(f"✅ ჩატვირთულია {len(self.all_assets)} აქტივი მონიტორინგისთვის")
+def signal_handler(signum, frame):
+    """Graceful shutdown on SIGTERM/SIGINT"""
+    logger.info(f"🛑 Received signal {signum}, initiating shutdown...")
+    shutdown_event.set()
 
-    async def analyze_and_notify(self):
-        """Main analysis loop - Twelve Data-ზე ოპტიმიზირებული"""
-        active_subscribers = self.telegram_handler.get_active_subscribers()
+# ========================
+# MAIN ORCHESTRATOR
+# ========================
+async def main():
+    """
+    Production-grade async orchestration
 
-        if not active_subscribers:
-            logger.info("⏸️ არ არის აქტიური გამომწერები - სკანირება შეჩერებულია")
-            return
+    Architecture:
+    - Telegram bot runs in background task
+    - Trading engine runs in background task
+    - Both tasks monitored and restarted on failure
+    - Graceful shutdown on SIGTERM (Railway compatibility)
+    """
 
-        sentiment_data = await self.trading_engine.get_market_sentiment()
+    logger.info("🚀 AI Trading Bot ინიციალიზაცია...")
 
-        logger.info(f"\n🧠 AI სკანირება იწყება: {len(self.all_assets)} აქტივი | Fear&Greed: {sentiment_data['fg_index']}")
+    # Initialize components
+    try:
+        telegram_handler = TelegramHandler()
+        trading_engine = TradingEngine()
 
-        scanned = 0
-        errors = 0
+        # Count assets
+        all_assets = CRYPTO + STOCKS + COMMODITIES
+        logger.info(f"✅ ჩატვირთულია {len(all_assets)} აქტივი მონიტორინგისთვის")
 
-        for asset in self.all_assets:
+    except Exception as e:
+        logger.error(f"❌ Initialization failed: {e}")
+        return
+
+    # ========================
+    # BACKGROUND TASKS
+    # ========================
+    async def run_telegram():
+        """Telegram bot wrapper with auto-restart"""
+        retry_count = 0
+        max_retries = 5
+
+        while not shutdown_event.is_set() and retry_count < max_retries:
             try:
-                # 1. მონაცემების წამოღება (Twelve Data)
-                data = await self.trading_engine.fetch_data(asset)
+                logger.info("📱 Starting Telegram handler...")
+                await telegram_handler.start()
 
-                if not data:
-                    errors += 1
-                    await asyncio.sleep(ASSET_DELAY)
-                    continue
+                # If we get here, telegram stopped unexpectedly
+                logger.warning("⚠️ Telegram handler stopped")
+                retry_count += 1
 
-                scanned += 1
-
-                # 2. პოზიციის შემოწმება (Exit ლოგიკა)
-                if asset in self.trading_engine.active_positions:
-                    await self.check_exit_conditions(asset, data, sentiment_data)
-                else:
-                    # 3. ანალიზი შესვლისთვის (Entry ლოგიკა)
-                    ai_score, ai_reasons = await self.trading_engine.ai_analyze_signal(
-                        asset, data, sentiment_data
-                    )
-
-                    if ai_score >= AI_ENTRY_THRESHOLD:
-                        # სიახლეების ვალიდაცია
-                        is_clean = await self.trading_engine.get_comprehensive_news(asset)
-                        if is_clean:
-                            await self.create_buy_signal(asset, data, sentiment_data, ai_score, ai_reasons)
-                        else:
-                            logger.info(f"📰 უარყოფითი სიახლეები, გამოტოვება: {asset}")
-
-                # 4. კრიტიკული დაყოვნება Twelve Data-ს ლიმიტისთვის
-                await asyncio.sleep(ASSET_DELAY)
+                if retry_count < max_retries:
+                    await asyncio.sleep(30)  # Wait before retry
 
             except Exception as e:
-                logger.error(f"❌ შეცდომა {asset}-ზე: {e}")
-                errors += 1
-                await asyncio.sleep(ASSET_DELAY)
+                retry_count += 1
+                logger.error(f"❌ Telegram error ({retry_count}/{max_retries}): {e}")
 
-        logger.info(f"✅ ციკლი დასრულდა - სკანირებული: {scanned}/{len(self.all_assets)}")
+                if retry_count < max_retries:
+                    await asyncio.sleep(30)
 
-    async def create_buy_signal(self, asset, data, sentiment, ai_score, ai_reasons):
-        """სიგნალის შექმნა და დაგზავნა"""
-        self.trading_engine.active_positions[asset] = {
-            "entry_price": data['price'],
-            "entry_time": asyncio.get_event_loop().time(),
-            "entry_rsi": data['rsi'],
-            "ai_score": ai_score
-        }
+        logger.error(f"🚨 Telegram handler failed after {max_retries} retries")
 
-        estimated_tp = self.trading_engine.calculate_dynamic_tp(data, sentiment)
-        reasons_text = "\n".join([f"• {r}" for r in ai_reasons])
-        asset_type = self.trading_engine.get_asset_type(asset)
+    async def run_trading_engine():
+        """Trading engine wrapper with auto-restart"""
+        retry_count = 0
+        max_retries = 5
 
-        message = BUY_SIGNAL_TEMPLATE.format(
-            asset=asset,
-            asset_type=asset_type,
-            price=data['price'],
-            rsi=data['rsi'],
-            ema200=data['ema200'],
-            ai_score=ai_score,
-            fg_index=sentiment['fg_index'],
-            fg_class=sentiment['fg_class'],
-            reasons=reasons_text,
-            sl_percent=STOP_LOSS_PERCENT,
-            tp_percent=TAKE_PROFIT_PERCENT,
-            estimated_tp=estimated_tp
+        while not shutdown_event.is_set() and retry_count < max_retries:
+            try:
+                logger.info("🤖 Starting Trading Engine...")
+                await trading_engine.run_forever()
+
+                # If we get here, engine stopped unexpectedly
+                logger.warning("⚠️ Trading engine stopped")
+                retry_count += 1
+
+                if retry_count < max_retries:
+                    await asyncio.sleep(60)  # Wait before retry
+
+            except Exception as e:
+                retry_count += 1
+                logger.error(f"❌ Trading engine error ({retry_count}/{max_retries}): {e}")
+
+                if retry_count < max_retries:
+                    await asyncio.sleep(60)
+
+        logger.error(f"🚨 Trading engine failed after {max_retries} retries")
+        shutdown_event.set()  # Shutdown everything if engine dies
+
+    async def monitor_shutdown():
+        """Wait for shutdown signal"""
+        await shutdown_event.wait()
+        logger.info("🛑 Shutdown signal received, cleaning up...")
+
+    # ========================
+    # RUN ALL TASKS
+    # ========================
+    try:
+        logger.info(f"""
+╔════════════════════════════════════════╗
+║    AI TRADING BOT STARTED              ║
+╠════════════════════════════════════════╣
+║ Version: v3.0 (Multi-Source)
+║ Crypto: {len(CRYPTO)}
+║ Stocks: {len(STOCKS)}
+║ Commodities: {len(COMMODITIES)}
+║ Total: {len(all_assets)}
+║ Scan Cycle: {SCAN_INTERVAL/60:.0f} minutes
+║ Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+╚════════════════════════════════════════╝
+        """)
+
+        # ✅ KEY FIX: Run both tasks concurrently (not sequentially)
+        await asyncio.gather(
+            run_telegram(),
+            run_trading_engine(),
+            monitor_shutdown(),
+            return_exceptions=True  # Don't crash if one fails
         )
 
-        await self.telegram_handler.broadcast_signal(message, asset)
-        self.trading_engine.stats['total_signals'] += 1
-        logger.info(f"🟢 BUY სიგნალი: {asset}")
+    except KeyboardInterrupt:
+        logger.info("⌨️ Keyboard interrupt received")
+        shutdown_event.set()
 
-    async def check_exit_conditions(self, asset, data, sentiment):
-        """გასვლის პირობების შემოწმება"""
-        position = self.trading_engine.active_positions[asset]
-        profit_percent = ((data['price'] - position['entry_price']) / position['entry_price']) * 100
-        hours_held = (asyncio.get_event_loop().time() - position['entry_time']) / 3600
+    except Exception as e:
+        logger.error(f"❌ Fatal error in main loop: {e}")
+        shutdown_event.set()
 
-        should_exit = False
-        reason = ""
+    finally:
+        logger.info("🧹 Cleaning up...")
 
-        if profit_percent <= -STOP_LOSS_PERCENT:
-            should_exit, reason = True, f"🔴 STOP-LOSS ({profit_percent:.2f}%)"
-        elif profit_percent >= TAKE_PROFIT_PERCENT:
-            should_exit, reason = True, f"🟢 TAKE-PROFIT (+{profit_percent:.2f}%)"
-        elif hours_held >= MAX_HOLD_HOURS:
-            should_exit, reason = True, "⏰ დროის ლიმიტი"
-        elif data['rsi'] > 75:
-            should_exit, reason = True, f"📈 RSI Overbought ({data['rsi']:.1f})"
-
-        if should_exit:
-            await self.create_sell_signal(asset, position['entry_price'], data['price'], profit_percent, hours_held, reason)
-
-    async def create_sell_signal(self, asset, entry_price, exit_price, profit_percent, hours_held, reason):
-        balance_1usd = 1.0 * (1 + (profit_percent / 100))
-        emoji = "🔴" if profit_percent < 0 else "🟢"
-
-        message = SELL_SIGNAL_TEMPLATE.format(
-            emoji=emoji, asset=asset, asset_type=self.trading_engine.get_asset_type(asset),
-            entry_price=entry_price, exit_price=exit_price, profit=profit_percent,
-            balance=balance_1usd, hours=hours_held, reason=reason
-        )
-
-        if profit_percent > 0: self.trading_engine.stats['successful_trades'] += 1
-        else: self.trading_engine.stats['failed_trades'] += 1
-
-        del self.trading_engine.active_positions[asset]
-        await self.telegram_handler.broadcast_signal(message, asset)
-
-    async def send_startup_message(self):
-        startup_msg = (
-            "💎 AI Trading Bot v2.0 (Twelve Data Edition) Акტიურია\n"
-            f"📊 მონიტორინგი: {len(self.all_assets)} აქტივი\n"
-            f"⏱️ ციკლი: ~{(len(self.all_assets) * ASSET_DELAY) / 60:.1f} წუთი"
-        )
-        try: await self.telegram_handler.bot.send_message(chat_id=ADMIN_ID, text=startup_msg)
-        except: pass
-        logger.info(startup_msg)
-
-    async def run(self):
+        # Cleanup telegram
         try:
-            await self.telegram_handler.start()
-            await self.send_startup_message()
-            while True:
-                await self.analyze_and_notify()
-                await asyncio.sleep(SCAN_INTERVAL)
-        except Exception as e:
-            logger.error(f"🚨 კრიტიკული შეცდომა: {e}")
+            await telegram_handler.stop()
+        except:
+            pass
 
-async def main():
-    bot = AITradingBot()
-    await bot.run()
+        logger.info("👋 Bot stopped gracefully")
 
+# ========================
+# ENTRY POINT
+# ========================
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Register signal handlers (Railway sends SIGTERM on shutdown)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Run the bot
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("⌨️ Stopped by user")
+    except Exception as e:
+        logger.error(f"💥 Fatal error: {e}")
+        sys.exit(1)
