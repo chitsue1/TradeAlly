@@ -3,4 +3,3 @@ aiohttp==3.9.1
 pandas==2.1.4
 PyPDF2==3.0.1
 twelvedata>=1.2.10
-https://github.com/twopirllc/pandas-ta/archive/refs/heads/main.zip
