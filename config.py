@@ -1,5 +1,5 @@
 """
-AI Trading Bot - Configuration
+AI Trading Bot - Configuration (Twelve Data Optimized)
 """
 
 # ========================
@@ -7,6 +7,11 @@ AI Trading Bot - Configuration
 # ========================
 TELEGRAM_TOKEN = "8247808058:AAGBsRWw8UOoZHMoulK6dGv-QI5L6A9f9rA"
 ADMIN_ID = 6564836899
+
+# ========================
+# API KEYS & PROVIDERS
+# ========================
+TWELVE_DATA_API_KEY = "c512e8ccb9ae4637a613152481546749"
 
 # ========================
 # FILE PATHS
@@ -18,95 +23,66 @@ CACHE_FILE = "market_cache.json"
 PDF_FOLDER = "My-AI-Agent_needs"
 
 # ========================
-# TRADING ASSETS
+# TRADING ASSETS (Twelve Data Format)
 # ========================
+# კრიპტო: Twelve Data იყენებს ფორმატს "BTC/USD"
 CRYPTO = [
-    "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD",
-    "ADA-USD", "DOGE-USD", "DOT-USD", "LINK-USD",
-    "AVAX-USD", "SHIB-USD", "LTC-USD", "BCH-USD",
-    "UNI-USD", "NEAR-USD", "ICP-USD", "HBAR-USD",
-    "ARB-USD", "OP-USD"
+    "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD",
+    "ADA/USD", "DOGE/USD", "DOT/USD", "LINK/USD",
+    "AVAX/USD", "LTC/USD", "BCH/USD", "UNI/USD", 
+    "NEAR/USD", "ICP/USD", "HBAR/USD"
 ]
 
+# აქციები: ჩვეულებრივი სიმბოლოები
 STOCKS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "BRK-B", "V", "JPM", "UNH", "MA", "PG", "HD",
-    "AVGO", "ORCL", "COST", "NFLX", "ADBE", "AMD",
-    "CRM", "WMT", "LLY", "BAC", "XOM", "PFE", "DIS"
+    "V", "JPM", "MA", "PG", "HD", "NFLX", "ADBE", "AMD","TSM", "ASML", "SNOW", "SQ", "PYPL", "XOM", "COST", "CAT"
 ]
 
+# საქონელი: Twelve Data-ს ფორმატი
 COMMODITIES = [
-    "GC=F", "SI=F", "CL=F", "NG=F", "ZC=F", "ZW=F",
-    "ES=F", "NQ=F", "DX=F", "HG=F"
+    "GOLD", "SILVER", "WTI"
 ]
-
-ASSETS = CRYPTO + STOCKS + COMMODITIES
 
 # ========================
-# TRADING PARAMETERS
+# TRADING PARAMETERS (Twelve Data Limits)
 # ========================
 INTERVAL = "1h"
-SCAN_INTERVAL = 300  # 5 minutes
-ASSET_DELAY = 2  # seconds between assets
-NOTIFICATION_COOLDOWN = 7200  # 2 hours
+
+# რადგან ლიმიტი არის 8 მოთხოვნა/წუთში, სკანირების ინტერვალი უნდა იყოს გონივრული.
+# 15 წუთი (900 წამი) იდეალურია, რომ ბოტმა მშვიდად დაასრულოს ციკლი.
+SCAN_INTERVAL = 900  
+
+# ASSET_DELAY - ყველაზე მნიშვნელოვანი პარამეტრი!
+# 60 წამი / 8 მოთხოვნა = 7.5 წამი. 
+# ჩვენ ავიღებთ 10 წამს, რომ API-მ არასდროს დაგვიბლოკოს წვდომა.
+ASSET_DELAY = 10  
+
+NOTIFICATION_COOLDOWN = 7200  
 STOP_LOSS_PERCENT = 5.0
 TAKE_PROFIT_PERCENT = 10.0
 MAX_HOLD_HOURS = 72
-RSS_CACHE_TIME = 1800  # 30 minutes
 
 # ========================
-# API RATE LIMITS
+# API RATE LIMITS (Twelve Data Free Plan)
 # ========================
-MAX_YAHOO_REQUESTS_PER_MINUTE = 30
-MAX_COINGECKO_REQUESTS_PER_MINUTE = 50
-MAX_SENTIMENT_REQUESTS_PER_HOUR = 40
+# მკაცრი ლიმიტები უფასო პაკეტისთვის
+MAX_TD_REQUESTS_PER_MINUTE = 8
+MAX_TD_REQUESTS_PER_DAY = 800
 
 # ========================
 # AI SETTINGS
 # ========================
-AI_ENTRY_THRESHOLD = 60  # Score threshold for buy signal
-AI_CONFIDENCE_HIGH = 80  # High confidence threshold
-AI_CONFIDENCE_LOW = 40   # Low confidence threshold
-
-# ========================
-# COINGECKO COIN MAPPING
-# ========================
-COINGECKO_MAP = {
-    "btc": "bitcoin",
-    "eth": "ethereum",
-    "bnb": "binancecoin",
-    "sol": "solana",
-    "xrp": "ripple",
-    "ada": "cardano",
-    "doge": "dogecoin",
-    "dot": "polkadot",
-    "link": "chainlink",
-    "avax": "avalanche-2",
-    "shib": "shiba-inu",
-    "ltc": "litecoin",
-    "bch": "bitcoin-cash",
-    "uni": "uniswap",
-    "near": "near",
-    "icp": "internet-computer",
-    "hbar": "hedera-hashgraph",
-    "arb": "arbitrum",
-    "op": "optimism"
-}
-
-# ========================
-# RSS FEEDS
-# ========================
-RSS_FEEDS = [
-    "https://cryptopanic.com/news/rss/",
-    "https://cointelegraph.com/rss"
-]
+AI_ENTRY_THRESHOLD = 70  
+AI_CONFIDENCE_HIGH = 85  
+AI_CONFIDENCE_LOW = 40   
 
 # ========================
 # MESSAGE TEMPLATES
 # ========================
 WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
 
-🧠 AI: {ai_info} AI Trading Bot
+🚀 AI Trading Bot (Powered by Twelve Data)
 
 📊 მონიტორინგი:
 • {crypto_count} კრიპტოვალუტა
@@ -120,23 +96,7 @@ WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
 /mystatus - სტატუსი
 /stop - გაუქმება
 
-❓ კითხვები? https://t.me/Kagurashinakami"""
-
-PAYMENT_INSTRUCTIONS = """💳 გამოწერის ინსტრუქცია:
-
-1️⃣ გადაიხადეთ 150₾
-🏦 ბანკი: საქართველოს ბანკი
-📋 IBAN: GE95BG0000000528102311
-👤 მიმღები: ლ.გ
-
-2️⃣ გადახდის შემდეგ:
-• გამოაგზავნეთ screenshot ამ ჩატში
-• ან პირადში: https://t.me/Kagurashinakami
-
-3️⃣ ჩვენ გავააქტიურებთ subscription-ს
-⏱️ პროცესი: 24 საათში
-
-❓ კითხვები? https://t.me/Kagurashinakami"""
+❓ დახმარებისთვის: https://t.me/Kagurashinakami"""
 
 BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{asset_type}]
 
@@ -144,22 +104,21 @@ BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{asset_type}]
 📊 RSI: {rsi:.1f}
 📈 EMA200: ${ema200:.2f}
 🧠 AI Score: {ai_score}/100
-📊 Fear&Greed: {fg_index} ({fg_class})
 
-📌 AI მიზეზები:
+📌 AI ანალიზი:
 {reasons}
 
 🎯 რისკ მენეჯმენტი:
 🔴 Stop-Loss: -{sl_percent}%
 🟢 Take-Profit: +{tp_percent}%
-💰 ესთიმეიტი TP: +{estimated_tp:.1f}% (პოტენციური)"""
+💰 პოტენციური მოგება: +{estimated_tp:.1f}%"""
 
 SELL_SIGNAL_TEMPLATE = """{emoji} გაყიდე: {asset} [{asset_type}]
 
 📊 შესვლა: ${entry_price:.2f}
 📊 გასვლა: ${exit_price:.2f}
 💰 მოგება/ზარალი: {profit:+.2f}%
-💵 1$-ის ბალანსი: ${balance:.4f}
+💵 ბალანსი (1$): ${balance:.4f}
 ⏱️ ხანგრძლივობა: {hours:.1f}სთ
 
 📌 მიზეზი: {reason}"""

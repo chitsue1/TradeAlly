@@ -1,8 +1,0 @@
-python-telegram-bot==20.7
-yfinance==0.2.40
-feedparser==6.0.11
-ta==0.11.0
-PyPDF2==3.0.1
-aiohttp==3.9.1
-pandas==2.1.4
-requests==2.31.0
