@@ -1,9 +1,6 @@
-python-telegram-bot
-aiohttp
-pandas
-pandas_ta
-PyPDF2
-yfinance
-feedparser
-ta
-requests
+python-telegram-bot==20.7
+aiohttp==3.9.1
+pandas==2.1.4
+pandas_ta==0.3.14b0
+PyPDF2==3.0.1
+twelvedata>=1.2.10
