@@ -186,13 +186,23 @@ class TelegramHandler:
 
     async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id != ADMIN_ID: return
-        stats = self.trading_engine.stats
+
+        # გასწორებული - თუ stats არ არსებობს, ვქმნით default მნიშვნელობებს
+        if hasattr(self.trading_engine, 'stats'):
+            stats = self.trading_engine.stats
+        else:
+            stats = {
+                'total_signals': 0,
+                'successful_trades': 0,
+                'failed_trades': 0
+            }
+
         stats_msg = (
             f"📊 **ბოტის სტატისტიკა**\n\n"
             f"👥 სულ მომხმარებელი: {len(self.subscriptions)}\n"
-            f"📡 სიგნალები: {stats['total_signals']}\n"
-            f"✅ წარმატებული: {stats['successful_trades']}\n"
-            f"❌ წაგებული: {stats['failed_trades']}"
+            f"📡 სიგნალები: {stats.get('total_signals', 0)}\n"
+            f"✅ წარმატებული: {stats.get('successful_trades', 0)}\n"
+            f"❌ წაგებული: {stats.get('failed_trades', 0)}"
         )
         await update.message.reply_text(stats_msg, parse_mode='Markdown')
 
@@ -247,9 +257,13 @@ class TelegramHandler:
         if now - self.last_notifications.get(asset, 0) < NOTIFICATION_COOLDOWN:
             return
         self.last_notifications[asset] = now
+
+        # დავამატოთ Guide ბოლოში
+        message_with_guide = message + GUIDE_FOOTER
+
         for user_id in self.get_active_subscribers():
             try:
-                await self.bot.send_message(chat_id=user_id, text=message, parse_mode='Markdown')
+                await self.bot.send_message(chat_id=user_id, text=message_with_guide, parse_mode='Markdown')
                 await asyncio.sleep(0.05)
             except:
                 continue
