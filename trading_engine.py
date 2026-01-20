@@ -1,16 +1,14 @@
 """
-AI Trading Bot - Trading Engine (Twelve Data Optimized)
-ბაზრის მონაცემების მოპოვება, ანალიზი და სიგნალების გენერაცია
+AI Trading Bot - Trading Engine (Multi-Source Optimized)
 """
 
 import asyncio
-import aiohttp
 import time
 import json
 import os
 import logging
-import feedparser
-from datetime import datetime
+import aiohttp
+import pandas as pd
 from ta.trend import EMAIndicator
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
@@ -21,78 +19,17 @@ except ImportError:
     PyPDF2 = None
 
 from config import *
+from market_data import MultiSourceDataProvider
 
 logger = logging.getLogger(__name__)
 
-
-# ========================
-# RATE LIMITER
-# ========================
-class RateLimiter:
-    """Smart rate limiter with exponential backoff for Twelve Data"""
-
-    def __init__(self, max_per_minute=8):
-        self.max_per_minute = max_per_minute
-        self.requests = []
-        self.backoff_until = 0
-
-    async def wait_if_needed(self):
-        now = time.time()
-
-        # Backoff mode
-        if now < self.backoff_until:
-            wait_time = self.backoff_until - now
-            logger.warning(f"⏸️ Rate limit backoff: {wait_time:.1f}s")
-            await asyncio.sleep(wait_time)
-            return
-
-        # Clean old requests
-        self.requests = [t for t in self.requests if now - t < 60]
-
-        if len(self.requests) >= self.max_per_minute:
-            wait_time = 60 - (now - self.requests[0]) + 1
-            logger.info(f"⏱️ Rate limit: waiting {wait_time:.1f}s")
-            await asyncio.sleep(wait_time)
-            self.requests = []
-
-        self.requests.append(now)
-
-    def trigger_backoff(self, seconds=300):
-        """Trigger exponential backoff on API errors"""
-        self.backoff_until = time.time() + seconds
-        logger.error(f"🚨 API Error - Backoff {seconds}s")
-
-
-# ========================
-# MARKET CACHE
-# ========================
 class MarketCache:
-    """Cache system for reducing API calls"""
-
     def __init__(self, cache_file=CACHE_FILE):
         self.cache_file = cache_file
-        self.cache = self.load_cache()
         self.sentiment_cache = {"data": None, "timestamp": 0}
         self.news_cache = {}
 
-    def load_cache(self):
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
-                    return json.load(f)
-        except:
-            pass
-        return {}
-
-    def save_cache(self):
-        try:
-            with open(self.cache_file, 'w') as f:
-                json.dump(self.cache, f)
-        except Exception as e:
-            logger.error(f"Cache save error: {e}")
-
     def get_sentiment(self):
-        """Get cached sentiment (30min TTL)"""
         if time.time() - self.sentiment_cache["timestamp"] < 1800:
             return self.sentiment_cache["data"]
         return None
@@ -101,7 +38,6 @@ class MarketCache:
         self.sentiment_cache = {"data": data, "timestamp": time.time()}
 
     def get_news(self, asset):
-        """Get cached news (30min TTL)"""
         if asset in self.news_cache:
             if time.time() - self.news_cache[asset]["timestamp"] < 1800:
                 return self.news_cache[asset]["data"]
@@ -110,293 +46,68 @@ class MarketCache:
     def set_news(self, asset, is_clean):
         self.news_cache[asset] = {"data": is_clean, "timestamp": time.time()}
 
-
-# ========================
-# TRADING ENGINE
-# ========================
 class TradingEngine:
-    """Main trading engine - Twelve Data data fetching, analysis, signals"""
-
     def __init__(self):
-        self.twelve_data_limiter = RateLimiter(MAX_TD_REQUESTS_PER_MINUTE)
-        self.sentiment_limiter = RateLimiter(1)  # 1 request per cycle
+        self.data_provider = MultiSourceDataProvider(twelve_data_key=TWELVE_DATA_API_KEY)
         self.cache = MarketCache()
-        self.trading_knowledge = self.load_trading_knowledge()
+        self.knowledge = self.load_trading_knowledge()
         self.active_positions = {}
-        self.stats = {
-            "total_signals": 0,
-            "successful_trades": 0,
-            "failed_trades": 0,
-            "total_profit_percent": 0.0
-        }
+        self.stats = {"total_signals": 0, "successful_trades": 0, "failed_trades": 0}
 
-    # ========================
-    # PDF KNOWLEDGE BASE
-    # ========================
     def load_trading_knowledge(self):
-        """Load trading knowledge from PDFs"""
         if os.path.exists(KNOWLEDGE_BASE_FILE):
             try:
                 with open(KNOWLEDGE_BASE_FILE, 'r', encoding='utf-8') as f:
-                    kb = json.load(f)
-                    logger.info(f"✅ ცოდნა ჩატვირთულია: {len(kb.get('patterns', []))} ნიმუში")
-                    return kb
-            except:
-                pass
+                    return json.load(f)
+            except: pass
+        return {"patterns": [], "strategies": []}
 
-        knowledge = {"patterns": [], "strategies": [], "indicators": []}
-
-        if not os.path.exists(PDF_FOLDER):
-            logger.warning(f"📁 PDF საქაღალდე არ მოიძებნა: {PDF_FOLDER}")
-            return knowledge
-
-        if not PyPDF2:
-            logger.warning("PyPDF2 not installed - skipping PDF loading")
-            return knowledge
-
-        try:
-            pdf_files = [f for f in os.listdir(PDF_FOLDER) if f.endswith('.pdf')]
-            logger.info(f"📚 იტვირთება {len(pdf_files)} PDF...")
-
-            for pdf_file in pdf_files:
-                pdf_path = os.path.join(PDF_FOLDER, pdf_file)
-                try:
-                    with open(pdf_path, 'rb') as file:
-                        pdf_reader = PyPDF2.PdfReader(file)
-                        text = ""
-                        for page in pdf_reader.pages:
-                            text += page.extract_text()
-                        knowledge = self.extract_knowledge_enhanced(text, knowledge)
-                        logger.info(f"✅ ჩატვირთულია: {pdf_file}")
-                except Exception as e:
-                    logger.error(f"❌ შეცდომა {pdf_file}: {e}")
-
-            with open(KNOWLEDGE_BASE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(knowledge, f, indent=2, ensure_ascii=False)
-
-            logger.info(f"🧠 სულ: {len(knowledge['patterns'])} ნიმუში")
-        except Exception as e:
-            logger.error(f"PDF შეცდომა: {e}")
-
-        return knowledge
-
-    def extract_knowledge_enhanced(self, text, knowledge):
-        """Enhanced keyword extraction"""
-        text_lower = text.lower()
-
-        # Patterns
-        pattern_keywords = {
-            "bullish_signals": ["bullish engulfing", "morning star", "hammer", "inverse head and shoulders"],
-            "bearish_signals": ["bearish engulfing", "evening star", "shooting star", "head and shoulders top"],
-            "reversal": ["trend reversal", "reversal pattern", "double bottom", "double top"],
-            "continuation": ["flag pattern", "pennant", "ascending triangle", "descending triangle"],
-            "support_resistance": ["support level", "resistance level", "breakout", "breakdown"]
+    async def fetch_data(self, symbol):
+        data = await self.data_provider.fetch_with_fallback(symbol)
+        if not data: return None
+        return {
+            "price": data.price, "rsi": data.rsi, "ema200": data.ema200,
+            "bb_low": data.bb_low, "bb_high": data.bb_high, "source": data.source
         }
 
-        for category, keywords in pattern_keywords.items():
-            for kw in keywords:
-                if kw in text_lower:
-                    context = self.get_context(text, kw, 300)
-                    if context and self.validate_context(context, category):
-                        if context not in knowledge["patterns"]:
-                            knowledge["patterns"].append(context)
-
-        # Strategies
-        strategy_keywords = [
-            "entry strategy", "exit strategy", "risk reward ratio",
-            "position sizing", "stop loss placement", "take profit target",
-            "trend following", "mean reversion", "momentum trading"
-        ]
-
-        for kw in strategy_keywords:
-            if kw in text_lower:
-                context = self.get_context(text, kw, 250)
-                if context and "not recommended" not in context.lower():
-                    if context not in knowledge["strategies"]:
-                        knowledge["strategies"].append(context)
-
-        return knowledge
-
-    def validate_context(self, context, category):
-        """Validate context to avoid negative patterns"""
-        context_lower = context.lower()
-        negative_words = ["not reliable", "avoid", "don't use", "failed", "poor", "weak signal"]
-
-        if any(neg in context_lower for neg in negative_words):
-            return False
-
-        if category == "bullish_signals":
-            return "bullish" in context_lower and "not" not in context_lower.split("bullish")[0][-20:]
-        elif category == "bearish_signals":
-            return "bearish" in context_lower and "avoid" not in context_lower
-
-        return True
-
-    def get_context(self, text, keyword, chars=200):
-        try:
-            index = text.lower().find(keyword)
-            if index == -1:
-                return None
-            start = max(0, index - chars // 2)
-            end = min(len(text), index + chars // 2)
-            return text[start:end].strip()
-        except:
-            return None
-
-    # ========================
-    # MARKET SENTIMENT
-    # ========================
     async def get_market_sentiment(self):
-        """Get market sentiment with caching"""
         cached = self.cache.get_sentiment()
-        if cached:
-            return cached
-
-        await self.sentiment_limiter.wait_if_needed()
-
+        if cached: return cached
         try:
             async with aiohttp.ClientSession() as session:
-                # Fear & Greed
-                try:
-                    async with session.get(
-                        "https://api.alternative.me/fng/",
-                        timeout=aiohttp.ClientTimeout(total=10)
-                    ) as response:
-                        fg_data = await response.json()
-                        fg_val = int(fg_data['data'][0]['value'])
-                        fg_class = fg_data['data'][0]['value_classification']
-                except:
-                    fg_val, fg_class = 50, "ნეიტრალური"
+                async with session.get("https://api.alternative.me/fng/", timeout=10) as resp:
+                    data = await resp.json()
+                    sentiment = {"fg_index": int(data['data'][0]['value']), "fg_class": data['data'][0]['value_classification']}
+                    self.cache.set_sentiment(sentiment)
+                    return sentiment
+        except: return {"fg_index": 50, "fg_class": "ნეიტრალური"}
 
-                sentiment = {
-                    "fg_index": fg_val,
-                    "fg_class": fg_class,
-                    "market_trend": 0  # Simplified for Twelve Data integration
-                }
-
-                self.cache.set_sentiment(sentiment)
-                return sentiment
-        except Exception as e:
-            logger.error(f"Sentiment error: {e}")
-            return {"fg_index": 50, "fg_class": "ნეიტრალური", "market_trend": 0}
-
-    # ========================
-    # DATA FETCHING - Twelve Data
-    # ========================
-    async def fetch_data(self, symbol):
-        """Fetch data from Twelve Data with rate limiting"""
-        try:
-            await self.twelve_data_limiter.wait_if_needed()
-
-            async with aiohttp.ClientSession() as session:
-                url = "https://api.twelvedata.com/time_series"
-                params = {
-                    "symbol": symbol,
-                    "interval": INTERVAL,
-                    "apikey": TWELVE_DATA_API_KEY,
-                    "outputsize": 200  # We need at least 200 for EMA200
-                }
-
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=15)) as response:
-                    if response.status != 200:
-                        logger.error(f"Twelve Data error {symbol}: {response.status}")
-                        if response.status == 429:
-                            self.twelve_data_limiter.trigger_backoff()
-                        return None
-
-                    data = await response.json()
-
-                    if data.get('status') == 'error':
-                        logger.error(f"Twelve Data API Error {symbol}: {data.get('message')}")
-                        return None
-
-                    values = data.get('values')
-                    if not values or len(values) < 200:
-                        logger.warning(f"არასაკმარისი მონაცემები: {symbol}")
-                        return None
-
-                    # Calculate indicators
-                    import pandas as pd
-                    df = pd.DataFrame(values)
-                    df['close'] = pd.to_numeric(df['close'])
-                    close = df['close'].iloc[::-1]  # Reverse for proper time order
-
-                    ema200 = EMAIndicator(close, window=200).ema_indicator().iloc[-1]
-                    rsi = RSIIndicator(close, window=14).rsi().iloc[-1]
-                    bb = BollingerBands(close, window=20, window_dev=2)
-
-                    logger.info(f"✅ Twelve Data: {symbol} (RSI: {rsi:.1f})")
-
-                    return {
-                        "price": close.iloc[-1],
-                        "ema200": ema200,
-                        "rsi": rsi,
-                        "bb_low": bb.bollinger_lband().iloc[-1],
-                        "bb_high": bb.bollinger_hband().iloc[-1]
-                    }
-        except Exception as e:
-            logger.error(f"❌ Fetch error {symbol}: {e}")
-            return None
-
-    # ========================
-    # NEWS ANALYSIS
-    # ========================
-    async def get_comprehensive_news(self, asset_name):
-        """News analysis with caching"""
-        cached = self.cache.get_news(asset_name)
-        if cached is not None:
-            return cached
-
-        # Simplified news analysis for now
-        is_clean = True
-        self.cache.set_news(asset_name, is_clean)
-        return is_clean
-
-    # ========================
-    # AI ANALYSIS
-    # ========================
     async def ai_analyze_signal(self, symbol, data, sentiment):
-        """Enhanced AI analysis"""
         score = 0
         reasons = []
-
-        # RSI Analysis
-        if data['rsi'] < 25:
+        if data['rsi'] < 30:
             score += 40
-            reasons.append(f"🔴 RSI ძალიან დაბალი ({data['rsi']:.1f})")
-        elif data['rsi'] < 35:
-            score += 25
-            reasons.append(f"📉 RSI დაბალი ({data['rsi']:.1f})")
-
-        # Trend Analysis
+            reasons.append(f"📉 გადაყიდულია (RSI: {data['rsi']:.1f})")
         if data['price'] > data['ema200']:
             score += 20
-            reasons.append("📈 ტრენდი აღმავალია")
-        else:
-            score -= 10
-
-        # Bollinger Bands
+            reasons.append("📈 აღმავალი ტრენდი")
         if data['price'] <= data['bb_low']:
-            score += 20
-            reasons.append("🎯 Bollinger ქვედა ზოლს ეხება")
-
-        # Market Sentiment
-        if sentiment['fg_index'] < 35:
+            score += 25
+            reasons.append("🎯 ქვედა ბოინჯერზეა")
+        if sentiment['fg_index'] < 30:
             score += 15
-            reasons.append(f"😰 შიში ბაზარზე ({sentiment['fg_index']})")
-
+            reasons.append("😱 პანიკაა")
         return score, reasons
 
-    def calculate_dynamic_tp(self, data, sentiment):
-        return TAKE_PROFIT_PERCENT
+    async def get_comprehensive_news(self, asset):
+        cached = self.cache.get_news(asset)
+        if cached is not None: return cached
+        self.cache.set_news(asset, True)
+        return True
 
+    def calculate_dynamic_tp(self, data, sentiment): return TAKE_PROFIT_PERCENT
     def get_asset_type(self, symbol):
-        if symbol in CRYPTO:
-            return "Crypto"
-        if symbol in STOCKS:
-            return "Stock"
+        if symbol in CRYPTO: return "Crypto"
+        if symbol in STOCKS: return "Stock"
         return "Commodity"
-
-    async def cleanup(self):
-        """Cleanup resources"""
-        pass
+    async def cleanup(self): pass

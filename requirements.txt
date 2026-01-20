@@ -60,3 +60,12 @@ requests
 ta
 twelvedata
 yfinance
+aiohttp
+feedparser
+pandas
+PyPDF2
+python-telegram-bot
+requests
+ta
+twelvedata
+yfinance
