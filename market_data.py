@@ -1,18 +1,19 @@
 """
-AI Trading Bot - Market Data Provider (Multi-Source with Intelligent Fallback)
+Market Data Provider - Simplified Version
+მხოლოდ უფასო წყაროები: Binance (crypto) + Yahoo (stocks/commodities)
+NO API KEYS NEEDED - 100% FREE
 """
 
 import asyncio
 import aiohttp
 import time
 import logging
-import pandas as pd
 from typing import Optional
 from dataclasses import dataclass
+import pandas as pd
 from ta.trend import EMAIndicator
 from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
-from config import *
 
 logger = logging.getLogger(__name__)
 
@@ -27,124 +28,194 @@ class MarketData:
     source: str
     timestamp: float
 
-class SmartRateLimiter:
-    def __init__(self, requests_per_minute: int = 8):
-        self.rpm = requests_per_minute
-        self.requests = []
-        self.backoff_until = 0
-
-    async def acquire(self):
-        now = time.time()
-        if now < self.backoff_until:
-            await asyncio.sleep(self.backoff_until - now)
-            now = time.time()
-
-        self.requests = [t for t in self.requests if now - t < 60]
-        if len(self.requests) >= self.rpm:
-            wait_time = 60 - (now - self.requests[0]) + 1
-            await asyncio.sleep(wait_time)
-            self.requests = []
-        self.requests.append(time.time())
-
-    def trigger_backoff(self, duration=300):
-        self.backoff_until = time.time() + duration
-
 class MultiSourceDataProvider:
-    def __init__(self, twelve_data_key: str):
-        self.twelve_data_key = twelve_data_key
-        self.td_limiter = SmartRateLimiter(8)
+    """
+    უმარტივესი multi-source provider
+    - Binance: კრიპტოსთვის (უფასო, unlimited)
+    - Yahoo Finance: აქციებისთვის (უფასო, ~2000/საათში)
+    """
+
+    def __init__(self, twelve_data_key: str = None, alpaca_key=None, alpaca_secret=None):
+        # ეს არგუმენტები არ გვჭირდება, მაგრამ compatibility-სთვის ვტოვებთ
         self.cache = {}
-        self.cache_ttl = 300
+        self.cache_ttl = 300  # 5 წუთი
+
         self.stats = {
-            "TwelveData": {"success": 0, "fail": 0},
-            "YahooFinance": {"success": 0, "fail": 0}
+            "binance": {"success": 0, "fail": 0},
+            "yahoo": {"success": 0, "fail": 0}
         }
 
-    async def fetch_with_fallback(self, symbol: str) -> Optional[MarketData]:
-        if symbol in self.cache:
-            data, ts = self.cache[symbol]
-            if time.time() - ts < self.cache_ttl:
-                return data
+    def _is_crypto(self, symbol: str) -> bool:
+        """კრიპტოს დეტექტი"""
+        crypto_list = ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", 
+                       "DOT", "LINK", "AVAX", "LTC", "BCH", "UNI", 
+                       "NEAR", "ICP", "HBAR"]
+        return any(c in symbol.upper() for c in crypto_list)
 
-        # 1. Try Twelve Data
-        data = await self._fetch_twelvedata(symbol)
-        if data:
-            self.stats["TwelveData"]["success"] += 1
-            self.cache[symbol] = (data, time.time())
-            return data
-        self.stats["TwelveData"]["fail"] += 1
-
-        # 2. Try Yahoo Finance (via direct API endpoint)
-        data = await self._fetch_yahoo_direct(symbol)
-        if data:
-            self.stats["YahooFinance"]["success"] += 1
-            self.cache[symbol] = (data, time.time())
-            return data
-        self.stats["YahooFinance"]["fail"] += 1
-
-        return None
-
-    async def _fetch_twelvedata(self, symbol: str) -> Optional[MarketData]:
+    async def _fetch_binance(self, symbol: str) -> Optional[pd.Series]:
+        """Binance-დან მონაცემები (კრიპტო)"""
         try:
-            await self.td_limiter.acquire()
+            # BTC/USD → BTCUSDT
+            clean_symbol = symbol.upper().replace("/", "").replace("USD", "USDT")
+
             async with aiohttp.ClientSession() as session:
-                url = "https://api.twelvedata.com/time_series"
-                params = {"symbol": symbol, "interval": INTERVAL, "apikey": self.twelve_data_key, "outputsize": 200}
-                async with session.get(url, params=params, timeout=10) as resp:
-                    if resp.status == 429:
-                        self.td_limiter.trigger_backoff()
+                url = "https://api.binance.com/api/v3/klines"
+                params = {
+                    "symbol": clean_symbol,
+                    "interval": "1h",
+                    "limit": 200
+                }
+
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        logger.debug(f"Binance failed for {symbol}: status {resp.status}")
                         return None
-                    data = await resp.json()
-                    if data.get('status') == 'error': return None
-                    values = data.get('values', [])
-                    if len(values) < 20: return None
-                    df = pd.DataFrame(values)
-                    df['close'] = pd.to_numeric(df['close'])
-                    return self._calculate(df['close'].iloc[::-1], symbol, "TwelveData")
-        except: return None
 
-    async def _fetch_yahoo_direct(self, symbol: str) -> Optional[MarketData]:
-        """Direct fetch from Yahoo Finance to avoid yfinance library issues"""
-        try:
-            ticker = symbol.replace("/", "-")
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-            params = {"interval": "1h", "range": "1mo"}
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, headers=headers, timeout=10) as resp:
-                    if resp.status != 200: return None
                     data = await resp.json()
-                    result = data.get('chart', {}).get('result', [])
-                    if not result: return None
-                    
-                    indicators = result[0].get('indicators', {})
-                    adjclose = indicators.get('adjclose', [{}])[0].get('adjclose')
-                    if not adjclose:
-                        quotes = indicators.get('quote', [{}])[0]
-                        closes = quotes.get('close', [])
-                    else:
-                        closes = adjclose
-                        
-                    valid_closes = [c for c in closes if c is not None]
-                    if len(valid_closes) < 20: return None
-                    
-                    return self._calculate(pd.Series(valid_closes), symbol, "YahooFinance")
+                    closes = [float(candle[4]) for candle in data]
+
+                    self.stats["binance"]["success"] += 1
+                    logger.debug(f"✅ Binance: {symbol}")
+                    return pd.Series(closes)
+
         except Exception as e:
-            logger.error(f"Yahoo direct fetch error for {symbol}: {e}")
+            self.stats["binance"]["fail"] += 1
+            logger.debug(f"Binance error for {symbol}: {e}")
             return None
 
-    def _calculate(self, close_series, symbol, source) -> Optional[MarketData]:
+    async def _fetch_yahoo(self, symbol: str) -> Optional[pd.Series]:
+        """Yahoo Finance-დან მონაცემები (აქციები/კრიპტო)"""
         try:
-            rsi = RSIIndicator(close_series).rsi().iloc[-1]
-            ema200 = EMAIndicator(close_series, window=min(200, len(close_series))).ema_indicator().iloc[-1]
-            bb = BollingerBands(close_series)
-            return MarketData(
-                symbol=symbol, price=float(close_series.iloc[-1]), rsi=float(rsi),
-                ema200=float(ema200), bb_low=float(bb.bollinger_lband().iloc[-1]),
-                bb_high=float(bb.bollinger_hband().iloc[-1]), source=source, timestamp=time.time()
-            )
-        except: return None
+            # Format: BTC/USD → BTC-USD, AAPL → AAPL
+            if "/" in symbol:
+                yahoo_symbol = symbol.replace("/", "-")
+            else:
+                yahoo_symbol = symbol
+
+            async with aiohttp.ClientSession() as session:
+                # Yahoo v8 API (უფასო, no key needed)
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
+                params = {
+                    "interval": "1h",
+                    "range": "1mo"  # 1 თვე = ~200+ hourly candles
+                }
+
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        logger.debug(f"Yahoo failed for {symbol}: status {resp.status}")
+                        return None
+
+                    data = await resp.json()
+
+                    # Parse Yahoo response
+                    result = data.get("chart", {}).get("result", [])
+                    if not result:
+                        return None
+
+                    indicators = result[0].get("indicators", {}).get("quote", [{}])[0]
+                    closes = indicators.get("close", [])
+
+                    # Remove None values
+                    closes = [c for c in closes if c is not None]
+
+                    if len(closes) < 200:
+                        logger.debug(f"Yahoo: not enough data for {symbol} ({len(closes)} candles)")
+                        return None
+
+                    self.stats["yahoo"]["success"] += 1
+                    logger.debug(f"✅ Yahoo: {symbol}")
+                    return pd.Series(closes[-200:])  # ბოლო 200
+
+        except Exception as e:
+            self.stats["yahoo"]["fail"] += 1
+            logger.debug(f"Yahoo error for {symbol}: {e}")
+            return None
+
+    async def fetch_with_fallback(self, symbol: str) -> Optional[MarketData]:
+        """
+        Multi-source fetch with fallback
+        Crypto: Binance → Yahoo
+        Stocks: Yahoo → Binance (some stocks on Binance)
+        """
+
+        # Check cache
+        if symbol in self.cache:
+            cached_data, cached_time = self.cache[symbol]
+            if time.time() - cached_time < self.cache_ttl:
+                logger.debug(f"💾 Cache hit: {symbol}")
+                return cached_data
+
+        # Determine source priority
+        is_crypto = self._is_crypto(symbol)
+
+        if is_crypto:
+            # კრიპტო: Binance → Yahoo
+            sources = [
+                ("binance", self._fetch_binance),
+                ("yahoo", self._fetch_yahoo)
+            ]
+        else:
+            # აქციები: Yahoo → Binance
+            sources = [
+                ("yahoo", self._fetch_yahoo),
+                ("binance", self._fetch_binance)  # ზოგიერთი აქცია Binance-ზეც არის
+            ]
+
+        # Try each source
+        for source_name, fetch_func in sources:
+            logger.debug(f"🔍 Trying {source_name} for {symbol}")
+
+            close_series = await fetch_func(symbol)
+
+            if close_series is not None and len(close_series) >= 200:
+                try:
+                    # Calculate indicators
+                    rsi = RSIIndicator(close_series).rsi().iloc[-1]
+                    ema200 = EMAIndicator(close_series, window=200).ema_indicator().iloc[-1]
+                    bb = BollingerBands(close_series)
+
+                    market_data = MarketData(
+                        symbol=symbol,
+                        price=close_series.iloc[-1],
+                        rsi=rsi,
+                        ema200=ema200,
+                        bb_low=bb.bollinger_lband().iloc[-1],
+                        bb_high=bb.bollinger_hband().iloc[-1],
+                        source=source_name,
+                        timestamp=time.time()
+                    )
+
+                    # Cache
+                    self.cache[symbol] = (market_data, time.time())
+
+                    logger.info(f"✅ {symbol} fetched from {source_name}")
+                    return market_data
+
+                except Exception as e:
+                    logger.error(f"Indicator calculation failed for {symbol}: {e}")
+                    continue
+
+        # All sources failed
+        logger.error(f"❌ All sources failed for {symbol}")
+        return None
 
     def get_stats(self):
-        return {"sources": self.stats, "cache_size": len(self.cache)}
+        """სტატისტიკა"""
+        total_binance = self.stats["binance"]["success"] + self.stats["binance"]["fail"]
+        total_yahoo = self.stats["yahoo"]["success"] + self.stats["yahoo"]["fail"]
+
+        return {
+            "sources": {
+                "binance": {
+                    "success": self.stats["binance"]["success"],
+                    "fail": self.stats["binance"]["fail"],
+                    "rate": (self.stats["binance"]["success"] / max(1, total_binance)) * 100
+                },
+                "yahoo": {
+                    "success": self.stats["yahoo"]["success"],
+                    "fail": self.stats["yahoo"]["fail"],
+                    "rate": (self.stats["yahoo"]["success"] / max(1, total_yahoo)) * 100
+                }
+            },
+            "cache_size": len(self.cache)
+        }

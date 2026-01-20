@@ -1,71 +1,34 @@
-# ========================
-# CORE DEPENDENCIES
-# ========================
 python-telegram-bot==20.7
 aiohttp==3.9.1
 pandas==2.1.4
 ta==0.11.0
-
-# ========================
-# MULTI-SOURCE DATA PROVIDERS
-# ========================
-# Binance (Free - no API key needed for market data)
-# Note: No separate library needed, uses direct REST API
-
-# Yahoo Finance (Free - no API key needed)
-yfinance==0.2.33
-
-# Alpaca Markets (Optional - free tier available)
-alpaca-py==0.13.3
-
-# TwelveData (Fallback - existing key)
-twelvedata>=1.2.10
-
-# ========================
-# UTILITIES
-# ========================
 PyPDF2==3.0.1
 feedparser==6.0.11
+twelvedata>=1.2.10
+```
 
-# ========================
-# NOTES
-# ========================
-# Priority order (handled automatically by market_data.py):
-# 1. Binance (crypto) - Free, unlimited for public data
-# 2. Yahoo Finance (stocks/crypto) - Free, ~2000 req/hour
-# 3. Alpaca (stocks) - Free tier: 200 req/min (optional)
-# 4. TwelveData (all) - Free tier: 8 req/min (fallback)
-#
-# Installation:
-# pip install -r requirements.txt
-#
-# Optional: Get free Alpaca API key at https://alpaca.markets
-# Add to config.py: ALPACA_API_KEY and ALPACA_SECRET_KEY
-aiohttp
-feedparser
-pandas
-PyPDF2
-python-telegram-bot
-requests
-ta
-telegram
-twelvedata
-yfinance
-aiohttp
-feedparser
-pandas
-PyPDF2
-python-telegram-bot
-requests
-ta
-twelvedata
-yfinance
-aiohttp
-feedparser
-pandas
-PyPDF2
-python-telegram-bot
-requests
-ta
-twelvedata
-yfinance
+**არაფერი მეტი არ სჭირდება!** Binance და Yahoo **API key-ის გარეშე** მუშაობენ.
+
+### 3️⃣ **Redeploy Railway**
+
+---
+
+## 📊 **რას უნდა დაინახო (5 წუთში):**
+```
+🔍 Trying binance for BTC/USD
+✅ BTC/USD fetched from binance
+
+🔍 Trying yahoo for AAPL
+✅ AAPL fetched from yahoo
+
+============================================================
+✅ SCAN CYCLE COMPLETE
+⏱️ Duration: 10.5 minutes
+📊 Success: 42/42 (100%)  ← ეს უნდა დაინახო!
+❌ Failed: 0/42
+
+📈 Provider Statistics:
+   binance    :  16 OK,   0 FAIL (100%)  ← კრიპტო
+   yahoo      :  26 OK,   0 FAIL (100%)  ← აქციები
+   Cache size: 42
+============================================================
