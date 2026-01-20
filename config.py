@@ -98,6 +98,12 @@ WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
 
 ❓ დახმარებისთვის: https://t.me/Kagurashinakami"""
 
+PAYMENT_INSTRUCTIONS = """💳 **გადახდის ინსტრუქცია**
+
+გადაიხადეთ 150₾ ბანკის ბარათზე და გამოგზავნეთ ქვითარი აქ.
+
+📌 ადმინი დაადასტურებს 24 საათში."""
+
 BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{asset_type}]
 
 💵 ფასი: ${price:.2f}

@@ -89,8 +89,9 @@ class TelegramHandler:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start command with Guide hint"""
         username = update.effective_user.username or "მომხმარებელი"
-        ai_info = f"{len(self.trading_engine.trading_knowledge.get('patterns', []))} ნიმუში" \
-                  if self.trading_engine.trading_knowledge.get('patterns') else "ბაზა"
+
+        # გასწორებული - trading_knowledge-ის ნაცვლად ვიყენებთ stats-ს
+        ai_info = "აქტიური"
 
         welcome_msg = WELCOME_MSG_TEMPLATE.format(
             username=username,
