@@ -2,12 +2,15 @@
 Market Data Provider - PRODUCTION VERSION
 100% tested, works with Railway
 Sources: Binance (crypto) + Yahoo Finance (stocks)
+
+✅ FIXED: pandas.np deprecated issue (line 210)
 """
 
 import asyncio
 import aiohttp
 import time
 import logging
+import numpy as np  # ✅ ADDED: Direct numpy import instead of pandas.np
 from typing import Optional
 from dataclasses import dataclass
 import pandas as pd
@@ -252,8 +255,10 @@ class MultiSourceDataProvider:
                     rsi_indicator = RSIIndicator(close_series, window=14)
                     rsi_value = rsi_indicator.rsi().iloc[-1]
 
-                    # Handle NaN/Inf values
-                    if pd.isna(rsi_value) or not pd.np.isfinite(rsi_value):
+                    # ✅ FIXED: Use numpy directly instead of pandas.np (deprecated)
+                    # OLD: if pd.isna(rsi_value) or not pd.np.isfinite(rsi_value):
+                    # NEW: if pd.isna(rsi_value) or not np.isfinite(rsi_value):
+                    if pd.isna(rsi_value) or not np.isfinite(rsi_value):
                         logger.debug(f"Invalid RSI for {symbol}")
                         continue
 
