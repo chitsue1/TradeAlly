@@ -1,7 +1,8 @@
 """
-AI Trading Bot - Telegram Handler
-ყველა Telegram ფუნქცია და ბრძანება (Optimized with Guide Function)
-FIXED: v20+ lifecycle, single-run protection, async-safe
+AI Trading Bot - Telegram Handler - FINAL PRODUCTION
+✅ v20+ lifecycle fixed
+✅ Compatible with existing event loop (asyncio.gather)
+✅ Single-run protection
 """
 
 import asyncio
@@ -29,7 +30,7 @@ class TelegramHandler:
         self.payment_requests = self.load_json(PAYMENT_REQUESTS_FILE)
         self.last_notifications = {}
 
-        # ✅ ᲓᲐᲛᲐᲢᲔᲑᲣᲚᲘ: Single-run protection
+        # ✅ Single-run protection
         self._is_running = False
         self._start_lock = asyncio.Lock()
 
@@ -94,8 +95,6 @@ class TelegramHandler:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start command with Guide hint"""
         username = update.effective_user.username or "მომხმარებელი"
-
-        # გასწორებული - trading_knowledge-ის ნაცვლად ვიყენებთ stats-ს
         ai_info = "აქტიური"
 
         welcome_msg = WELCOME_MSG_TEMPLATE.format(
@@ -106,7 +105,6 @@ class TelegramHandler:
             commodities_count=len(COMMODITIES)
         )
 
-        # დამატებითი ინფორმაცია გაიდზე
         welcome_msg += "\n\n📖 **ახალი ხართ?** გამოიყენეთ ბრძანება /guide სიგნალების განმარტებისთვის."
 
         await update.message.reply_text(welcome_msg, parse_mode='Markdown')
@@ -192,7 +190,6 @@ class TelegramHandler:
     async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id != ADMIN_ID: return
 
-        # გასწორებული - თუ stats არ არსებობს, ვქმნით default მნიშვნელობებს
         if hasattr(self.trading_engine, 'stats'):
             stats = self.trading_engine.stats
         else:
@@ -263,7 +260,6 @@ class TelegramHandler:
             return
         self.last_notifications[asset] = now
 
-        # დავამატოთ Guide ბოლოში
         message_with_guide = message + GUIDE_FOOTER
 
         for user_id in self.get_active_subscribers():
@@ -287,23 +283,12 @@ class TelegramHandler:
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
 
     # ========================
-    # ✅ FIXED: v20+ LIFECYCLE
+    # ✅ FIXED: v20+ LIFECYCLE (Compatible with existing event loop)
     # ========================
     async def start(self):
         """
-        ᲨᲔᲡᲬᲝᲠᲔᲑᲣᲚᲘ v20+ lifecycle მეთოდი:
-
-        1. Single-run protection: _start_lock და _is_running flag
-        2. წაშლილია updater.start_polling() (deprecated v13 API)
-        3. გამოყენებულია run_polling() (v20+ სტანდარტი)
-        4. Graceful initialization და error handling
-        5. არ ჩერდება გაშვების შემდეგ - run_polling() აპოლინგავს უსასრულოდ
-
-        რას აკეთებს:
-        - ამოწმებს არის თუ არა უკვე გაშვებული
-        - აინიციალიზებს Application-ს
-        - იწყებს polling-ს (ბლოკავს ამ coroutine-ს, მაგრამ არა მთელ event loop-ს)
-        - polling ავტომატურად ამუშავებს შემომავალ updates-ებს
+        CRITICAL FIX for "Cannot close a running event loop"
+        Uses low-level API compatible with asyncio.gather()
         """
         async with self._start_lock:
             if self._is_running:
@@ -311,20 +296,23 @@ class TelegramHandler:
                 return
 
             try:
-                # ✅ ინიციალიზაცია (v20+ სტანდარტი)
                 await self.application.initialize()
                 logger.info("✅ Telegram Application ინიციალიზებულია")
 
-                # ✅ დავაფლაგოთ, რომ გაშვებულია
+                await self.application.start()
+                logger.info("✅ Telegram Application started")
+
+                await self.application.updater.start_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True
+                )
+                logger.info("🚀 Telegram Bot polling დაიწყო")
+
                 self._is_running = True
 
-                # ✅ v20+ სტანდარტი: run_polling ეშვება და ბლოკავს async-ულად
-                # ეს არ ჩერდება, სანამ bot მუშაობს (polling loop უსასრულოა)
-                logger.info("🚀 Telegram Bot იწყებს polling-ს...")
-                await self.application.run_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True  # ძველი updates-ების გამოტოვება
-                )
+                # Keep alive
+                self._stop_event = asyncio.Event()
+                await self._stop_event.wait()
 
             except Exception as e:
                 logger.error(f"❌ Telegram Handler გაშვების შეცდომა: {e}")
@@ -332,16 +320,20 @@ class TelegramHandler:
                 raise
 
     async def stop(self):
-        """
-        ✅ დამატებული: Graceful shutdown მეთოდი
-        """
+        """Graceful shutdown"""
         if not self._is_running:
             return
 
         try:
             logger.info("🛑 Telegram Bot ჩერდება...")
+
+            if hasattr(self, '_stop_event'):
+                self._stop_event.set()
+
+            await self.application.updater.stop()
             await self.application.stop()
             await self.application.shutdown()
+
             self._is_running = False
             logger.info("✅ Telegram Bot გაჩერდა")
         except Exception as e:

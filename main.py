@@ -1,6 +1,8 @@
 """
-AI Trading Bot - Main Entry Point (Production-Ready)
-Fixed: Correct initialization order for TelegramHandler dependency
+AI Trading Bot - Main Entry Point - FINAL PRODUCTION
+✅ Bidirectional TradingEngine ↔ TelegramHandler connection
+✅ Auto-restart logic
+✅ Graceful shutdown
 """
 
 import asyncio
@@ -40,17 +42,18 @@ def signal_handler(signum, frame):
 # ========================
 async def main():
     """
-    Production-grade async orchestration with correct dependency injection
+    Production-grade async orchestration with bidirectional connection
 
     Architecture:
     1. Create TradingEngine first
-    2. Pass it to TelegramHandler (dependency injection)
-    3. Run both in parallel
+    2. Create TelegramHandler with engine dependency
+    3. ✅ CRITICAL: Link TradingEngine → TelegramHandler (bidirectional)
+    4. Run both in parallel with asyncio.gather()
     """
 
     logger.info("🚀 AI Trading Bot ინიციალიზაცია...")
 
-    # ✅ STEP 1: Initialize TradingEngine first
+    # ✅ STEP 1: Initialize TradingEngine
     try:
         trading_engine = TradingEngine()
         logger.info("✅ Trading Engine initialized")
@@ -58,13 +61,17 @@ async def main():
         logger.error(f"❌ TradingEngine initialization failed: {e}")
         return
 
-    # ✅ STEP 2: Initialize TelegramHandler with engine dependency
+    # ✅ STEP 2: Initialize TelegramHandler
     try:
         telegram_handler = TelegramHandler(trading_engine)
         logger.info("✅ Telegram Handler initialized")
     except Exception as e:
         logger.error(f"❌ TelegramHandler initialization failed: {e}")
         return
+
+    # ✅ STEP 3: CRITICAL - Bidirectional linking
+    trading_engine.telegram_handler = telegram_handler
+    logger.info("✅ TradingEngine ↔ TelegramHandler დაკავშირებულია")
 
     # Count assets
     all_assets = CRYPTO + STOCKS + COMMODITIES
@@ -83,7 +90,6 @@ async def main():
                 logger.info("📱 Starting Telegram handler...")
                 await telegram_handler.start()
 
-                # If we get here, telegram stopped unexpectedly
                 logger.warning("⚠️ Telegram handler stopped")
                 retry_count += 1
 
@@ -110,7 +116,6 @@ async def main():
                 logger.info("🤖 Starting Trading Engine...")
                 await trading_engine.run_forever()
 
-                # If we get here, engine stopped unexpectedly
                 logger.warning("⚠️ Trading engine stopped")
                 retry_count += 1
 
@@ -141,12 +146,13 @@ async def main():
 ╔════════════════════════════════════════╗
 ║    AI TRADING BOT STARTED              ║
 ╠════════════════════════════════════════╣
-║ Version: v3.0 (Multi-Source)
+║ Version: v4.0 (CoinGecko + Multi-Source)
 ║ Crypto: {len(CRYPTO)}
 ║ Stocks: {len(STOCKS)}
 ║ Commodities: {len(COMMODITIES)}
 ║ Total: {len(all_assets)}
 ║ Scan Cycle: {SCAN_INTERVAL/60:.0f} minutes
+║ Connection: Engine ↔ Telegram ✅
 ║ Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 ╚════════════════════════════════════════╝
         """)
@@ -170,7 +176,6 @@ async def main():
     finally:
         logger.info("🧹 Cleaning up...")
 
-        # Cleanup telegram
         try:
             await telegram_handler.stop()
         except:
@@ -182,11 +187,9 @@ async def main():
 # ENTRY POINT
 # ========================
 if __name__ == "__main__":
-    # Register signal handlers (Railway sends SIGTERM on shutdown)
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Run the bot
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
