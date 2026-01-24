@@ -238,27 +238,38 @@ class TradingEngine:
 
     async def send_buy_signal(self, symbol, data, ai_score, reasons):
         """
-        ✅ Send buy signal to Telegram
-        Compatible with existing telegram_handler
+        ✅ Send buy signal to Telegram with tier detection
         """
         if not hasattr(self, 'telegram_handler') or self.telegram_handler is None:
             logger.warning("⚠️ Telegram handler not linked, skipping notification")
             return
 
-        # Determine asset type
-        if symbol in CRYPTO:
-            asset_type = "CRYPTO"
-        elif symbol in STOCKS:
-            asset_type = "STOCK"
-        elif symbol in COMMODITIES:
-            asset_type = "COMMODITY"
+        # ✅ Determine tier from config
+        from config import (
+            TIER_1_BLUE_CHIPS,
+            TIER_2_HIGH_GROWTH,
+            TIER_3_MEME_COINS,
+            TIER_4_NARRATIVE,
+            TIER_5_EMERGING
+        )
+
+        if symbol in TIER_1_BLUE_CHIPS:
+            tier = "🔵 BLUE CHIP"
+        elif symbol in TIER_2_HIGH_GROWTH:
+            tier = "🟢 HIGH GROWTH"
+        elif symbol in TIER_3_MEME_COINS:
+            tier = "🟡 MEME"
+        elif symbol in TIER_4_NARRATIVE:
+            tier = "🟣 NARRATIVE"
+        elif symbol in TIER_5_EMERGING:
+            tier = "🔴 EMERGING"
         else:
-            asset_type = "UNKNOWN"
+            tier = "CRYPTO"
 
         # Format message using template from config
         message = BUY_SIGNAL_TEMPLATE.format(
             asset=symbol,
-            asset_type=asset_type,
+            tier=tier,
             price=data['price'],
             rsi=data['rsi'],
             ema200=data['ema200'],
@@ -274,7 +285,7 @@ class TradingEngine:
         try:
             await self.telegram_handler.broadcast_signal(message, symbol)
             self.stats['total_signals'] += 1
-            logger.info(f"📤 Buy signal sent for {symbol}")
+            logger.info(f"📤 Buy signal sent for {symbol} [{tier}]")
         except Exception as e:
             logger.error(f"❌ Failed to send signal for {symbol}: {e}")
 

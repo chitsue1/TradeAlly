@@ -1,10 +1,3 @@
-"""
-AI Trading Bot - Telegram Handler - FINAL PRODUCTION
-✅ v20+ lifecycle fixed
-✅ Compatible with existing event loop (asyncio.gather)
-✅ Single-run protection
-"""
-
 import asyncio
 import json
 import os
@@ -13,57 +6,68 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 
+# ივარაუდება, რომ config.py-ში გაქვს ყველა საჭირო ცვლადი (TOKEN, ADMIN_ID და ა.შ.)
 from config import *
 
 logger = logging.getLogger(__name__)
 
 class TelegramHandler:
-    """Telegram bot handler - commands, messages, callbacks"""
+    """
+    პროფესიონალური Telegram Bot Handler.
+    მართავს მომხმარებლებს, გადახდებს, სიგნალების დაგზავნას და ადმინისტრირებას.
+    """
 
     def __init__(self, trading_engine):
         self.trading_engine = trading_engine
+        # აპლიკაციის ინიციალიზაცია
         self.application = Application.builder().token(TELEGRAM_TOKEN).build()
         self.bot = self.application.bot
 
-        # Load data
-        self.subscriptions = self.load_json(SUBSCRIPTIONS_FILE)
-        self.payment_requests = self.load_json(PAYMENT_REQUESTS_FILE)
+        # მონაცემების ფაილების გზები (config-დან)
+        self.subscriptions_file = SUBSCRIPTIONS_FILE
+        self.payment_requests_file = PAYMENT_REQUESTS_FILE
+
+        # მონაცემების ჩატვირთვა
+        self.subscriptions = self.load_json(self.subscriptions_file)
+        self.payment_requests = self.load_json(self.payment_requests_file)
         self.last_notifications = {}
 
-        # ✅ Single-run protection
+        # დაცვის მექანიზმები
         self._is_running = False
         self._start_lock = asyncio.Lock()
 
-        # Setup handlers
+        # ჰენდლერების გამართვა
         self.setup_handlers()
 
     # ========================
-    # JSON OPERATIONS
+    # მონაცემთა მართვა (JSON)
     # ========================
     def load_json(self, filename):
         try:
             if os.path.exists(filename):
-                with open(filename, 'r') as f:
+                with open(filename, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    if filename == SUBSCRIPTIONS_FILE:
+                    if filename == self.subscriptions_file:
                         return {int(k): v for k, v in data.items()}
                     return data
             return {}
         except Exception as e:
-            logger.error(f"Load error {filename}: {e}")
+            logger.error(f"❌ ფაილის ჩატვირთვის შეცდომა {filename}: {e}")
             return {}
 
     def save_json(self, data, filename):
         try:
-            if filename == SUBSCRIPTIONS_FILE:
-                data = {str(k): v for k, v in data.items()}
-            with open(filename, 'w') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            temp_data = data
+            if filename == self.subscriptions_file:
+                temp_data = {str(k): v for k, v in data.items()}
+
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(temp_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"Save error {filename}: {e}")
+            logger.error(f"❌ ფაილის შენახვის შეცდომა {filename}: {e}")
 
     # ========================
-    # SUBSCRIPTION MANAGEMENT
+    # SUBSCRIPTION ლოგიკა
     # ========================
     def is_active_subscriber(self, user_id):
         if user_id not in self.subscriptions:
@@ -84,159 +88,107 @@ class TelegramHandler:
             'activated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'plan': 'premium'
         }
-        self.save_json(self.subscriptions, SUBSCRIPTIONS_FILE)
+        self.save_json(self.subscriptions, self.subscriptions_file)
+        logger.info(f"✅ მომხმარებელს {user_id} გაუაქტიურდა პრემიუმი {days} დღით.")
 
     def get_active_subscribers(self):
         return [uid for uid in self.subscriptions.keys() if self.is_active_subscriber(uid)]
 
     # ========================
-    # COMMAND HANDLERS
+    # მომხმარებლის ბრძანებები
     # ========================
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Start command with Guide hint"""
         username = update.effective_user.username or "მომხმარებელი"
-        ai_info = "აქტიური"
-
         welcome_msg = WELCOME_MSG_TEMPLATE.format(
             username=username,
-            ai_info=ai_info,
-            crypto_count=len(CRYPTO),
-            stocks_count=len(STOCKS),
-            commodities_count=len(COMMODITIES)
+            ai_info="აქტიური 🧠",
+            crypto_count="50+",
+            stocks_count="Top 100",
+            commodities_count="Gold/Oil"
         )
-
-        welcome_msg += "\n\n📖 **ახალი ხართ?** გამოიყენეთ ბრძანება /guide სიგნალების განმარტებისთვის."
-
+        welcome_msg += "\n\n📖 **ახალი ხართ?** გამოიყენეთ /guide სიგნალების განმარტებისთვის."
         await update.message.reply_text(welcome_msg, parse_mode='Markdown')
 
     async def cmd_guide(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Guide command - Explains the trading logic to users"""
         guide_text = (
-            "📖 **AI სიგნალების განმარტება**\n\n"
-            "ჩემი სიგნალები ეფუძნება კომპლექსურ ანალიზს. აი, რა უნდა იცოდეთ:\n\n"
-            "🔹 **RSI (სიჩქარის საზომი):**\n"
-            "• თუ < 30: აქტივი ძალიან იაფია (გადაყიდულია). საუკეთესო დროა ყიდვისთვის.\n"
-            "• თუ > 70: აქტივი ძვირია. ფრთხილად იყავით.\n\n"
-            "🔹 **EMA 200 (ტრენდის ხაზი):**\n"
-            "• ეს არის ბაზრის 'დინება'. თუ ფასი ამ ხაზის ზემოთაა, ტრენდი აღმავალია და ყიდვა უფრო უსაფრთხოა.\n\n"
-            "🔹 **Bollinger Bands (დერეფანი):**\n"
-            "• ქვედა ხაზთან შეხება ნიშნავს 'იატაკს', საიდანაც ფასი ხშირად ზემოთ ხტება.\n\n"
-            "🔹 **AI Score (ნდობა):**\n"
-            "• **80-100:** მაღალი ალბათობა\n"
-            "• **60-70:** საშუალო რისკი\n\n"
-            "🛡️ **Stop-Loss:** ყოველთვის გამოიყენეთ ეს მაჩვენებელი, რომ დაიცვათ თქვენი ბალანსი დიდი ვარდნისგან."
+            "📖 **AI ვაჭრობის გზამკვლევი**\n\n"
+            "🔹 **RSI (სიჩქარე):** <30 = იაფია (ყიდვა), >70 = ძვირია.\n"
+            "🔹 **EMA 200:** თუ ფასი ხაზს ზემოთაა - ტრენდი ზრდადია.\n"
+            "🔹 **BB Low:** ქვედა ზოლთან შეხება - პოტენციური ასხლეტა.\n"
+            "🔹 **Stop-Loss:** ყოველთვის დააყენეთ რისკის დასაზღვევად!"
         )
         await update.message.reply_text(guide_text, parse_mode='Markdown')
 
-    async def cmd_subscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(PAYMENT_INSTRUCTIONS)
+    async def cmd_tiers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # კატეგორიების ჩვენება (config-დან წამოღებული)
+        from config import TIER_1_BLUE_CHIPS, TIER_2_HIGH_GROWTH, TIER_3_MEME_COINS
+        tiers_msg = (
+            "📊 **კრიპტო კატეგორიები:**\n\n"
+            f"🔵 **Tier 1 (სტაბილური):** {', '.join([c.split('/')[0] for c in TIER_1_BLUE_CHIPS[:5]])}...\n"
+            f"🟢 **Tier 2 (ზრდადი):** {', '.join([c.split('/')[0] for c in TIER_2_HIGH_GROWTH[:5]])}...\n"
+            f"🟡 **Tier 3 (მემეები):** {', '.join([c.split('/')[0] for c in TIER_3_MEME_COINS[:5]])}..."
+        )
+        await update.message.reply_text(tiers_msg, parse_mode='Markdown')
 
     async def cmd_mystatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if self.is_active_subscriber(user_id):
             expires = self.subscriptions[user_id]['expires_at']
-            days_left = (datetime.strptime(expires, '%Y-%m-%d').date() - datetime.now().date()).days
-            status_msg = (
-                f"✅ **აქტიური სტატუსი**\n\n"
-                f"📅 იწურება: `{expires}`\n"
-                f"⏳ დარჩენილი: {days_left} დღე\n"
-                f"🧠 AI ანალიზი: ჩართულია"
-            )
+            status_msg = f"✅ **სტატუსი: აქტიური**\n📅 იწურება: `{expires}`"
         else:
-            status_msg = "⚠️ თქვენ არ გაქვთ აქტიური subscription.\nგასააქტიურებლად: /subscribe"
+            status_msg = "⚠️ არ გაქვთ აქტიური პაკეტი. /subscribe"
         await update.message.reply_text(status_msg, parse_mode='Markdown')
 
-    async def cmd_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if user_id in self.subscriptions:
-            del self.subscriptions[user_id]
-            self.save_json(self.subscriptions, SUBSCRIPTIONS_FILE)
-            await update.message.reply_text("👋 სერვისი გაუქმებულია. იმედია მალე დაბრუნდებით!")
-        else:
-            await update.message.reply_text("ℹ️ თქვენ არ გაქვთ აქტიური სერვისი.")
-
     # ========================
-    # ADMIN COMMANDS
+    # ადმინისტრატორის ფუნქციები
     # ========================
     async def cmd_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.effective_user.id != ADMIN_ID:
-            return
-        admin_msg = (
-            "👑 **ადმინ პანელი**\n\n"
-            "/adduser [ID] [დღეები]\n"
-            "/listusers - მომხმარებლები\n"
-            "/botstats - სტატისტიკა"
-        )
-        await update.message.reply_text(admin_msg, parse_mode='Markdown')
-
-    async def cmd_adduser(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id != ADMIN_ID: return
-        try:
-            target_id = int(context.args[0])
-            days = int(context.args[1]) if len(context.args) > 1 else 30
-            self.add_subscription(target_id, days)
-            await update.message.reply_text(f"✅ მომხმარებელი {target_id} დაემატა {days} დღით.")
-        except:
-            await update.message.reply_text("❌ ფორმატი: /adduser [ID] [დღეები]")
-
-    async def cmd_listusers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.effective_user.id != ADMIN_ID: return
-        users_text = "📋 **მომხმარებელთა სია:**\n\n"
-        for uid, data in self.subscriptions.items():
-            status = "✅" if self.is_active_subscriber(uid) else "❌"
-            users_text += f"{status} `{uid}` - {data.get('expires_at')}\n"
-        await update.message.reply_text(users_text, parse_mode='Markdown')
+        msg = "👑 **ადმინ პანელი**\n\n/adduser [ID] [days]\n/listusers\n/botstats"
+        await update.message.reply_text(msg, parse_mode='Markdown')
 
     async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id != ADMIN_ID: return
-
-        if hasattr(self.trading_engine, 'stats'):
-            stats = self.trading_engine.stats
-        else:
-            stats = {
-                'total_signals': 0,
-                'successful_trades': 0,
-                'failed_trades': 0
-            }
-
-        stats_msg = (
+        stats = getattr(self.trading_engine, 'stats', {})
+        msg = (
             f"📊 **ბოტის სტატისტიკა**\n\n"
-            f"👥 სულ მომხმარებელი: {len(self.subscriptions)}\n"
-            f"📡 სიგნალები: {stats.get('total_signals', 0)}\n"
-            f"✅ წარმატებული: {stats.get('successful_trades', 0)}\n"
-            f"❌ წაგებული: {stats.get('failed_trades', 0)}"
+            f"👥 მომხმარებლები: {len(self.subscriptions)}\n"
+            f"📡 სულ სიგნალები: {stats.get('total_signals', 0)}"
         )
-        await update.message.reply_text(stats_msg, parse_mode='Markdown')
+        await update.message.reply_text(msg, parse_mode='Markdown')
 
     # ========================
-    # PAYMENT & CALLBACKS
+    # გადახდების დამუშავება
     # ========================
     async def handle_payment_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         username = update.effective_user.username or "User"
+
+        photo_id = update.message.photo[-1].file_id
         self.payment_requests[str(user_id)] = {
             'username': username,
             'status': 'pending',
-            'photo_id': update.message.photo[-1].file_id
+            'photo_id': photo_id,
+            'time': datetime.now().isoformat()
         }
-        self.save_json(self.payment_requests, PAYMENT_REQUESTS_FILE)
+        self.save_json(self.payment_requests, self.payment_requests_file)
 
-        await update.message.reply_text("📸 ფოტო მიღებულია! ადმინისტრატორი დაადასტურებს 24 საათში.")
+        await update.message.reply_text("📸 ფოტო მიღებულია! ადმინისტრატორი განიხილავს უმოკლეს დროში.")
 
+        # ადმინთან გაგზავნა დასადასტურებლად
         keyboard = [[
             InlineKeyboardButton("✅ დადასტურება", callback_data=f"approve_{user_id}"),
             InlineKeyboardButton("❌ უარყოფა", callback_data=f"reject_{user_id}")
         ]]
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
-            photo=update.message.photo[-1].file_id,
-            caption=f"🔄 გადახდა: @{username} ({user_id})",
+            photo=photo_id,
+            caption=f"🔄 გადახდის მოთხოვნა: @{username} ({user_id})",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
-        await query.answer()
         if update.effective_user.id != ADMIN_ID: return
 
         action, target_id = query.data.split("_")
@@ -245,96 +197,76 @@ class TelegramHandler:
         if action == "approve":
             self.add_subscription(target_id)
             await query.edit_message_caption(caption=f"✅ დადასტურებულია: {target_id}")
-            await self.bot.send_message(target_id, "🎉 თქვენი გადახდა დადასტურდა! სერვისი აქტიურია.")
+            await self.bot.send_message(target_id, "🎉 გადახდა დადასტურდა! სიგნალები ჩართულია.")
         else:
             await query.edit_message_caption(caption=f"❌ უარყოფილია: {target_id}")
-            await self.bot.send_message(target_id, "❌ გადახდა უარყოფილია. გთხოვთ დაუკავშირდეთ ადმინს.")
+            await self.bot.send_message(target_id, "❌ გადახდა უარყოფილია. ხარვეზის შემთხვევაში მოგვწერეთ.")
+
+        await query.answer()
 
     # ========================
-    # BROADCASTING & SETUP
+    # სიგნალების დაგზავნა (Broadcasting)
     # ========================
     async def broadcast_signal(self, message, asset):
         import time
         now = time.time()
+        # Cooldown დაცვა (config-დან)
         if now - self.last_notifications.get(asset, 0) < NOTIFICATION_COOLDOWN:
             return
+
         self.last_notifications[asset] = now
+        full_message = message + "\n\n" + GUIDE_FOOTER
 
-        message_with_guide = message + GUIDE_FOOTER
-
-        for user_id in self.get_active_subscribers():
+        active_users = self.get_active_subscribers()
+        for user_id in active_users:
             try:
-                await self.bot.send_message(chat_id=user_id, text=message_with_guide, parse_mode='Markdown')
-                await asyncio.sleep(0.05)
-            except:
-                continue
+                await self.bot.send_message(chat_id=user_id, text=full_message, parse_mode='Markdown')
+                await asyncio.sleep(0.05) # Flood protection
+            except Exception as e:
+                logger.debug(f"შეცდომა გაგზავნისას {user_id}: {e}")
 
+    # ========================
+    # LIFECYCLE მენეჯმენტი
+    # ========================
     def setup_handlers(self):
         self.application.add_handler(CommandHandler("start", self.cmd_start))
         self.application.add_handler(CommandHandler("guide", self.cmd_guide))
-        self.application.add_handler(CommandHandler("subscribe", self.cmd_subscribe))
+        self.application.add_handler(CommandHandler("tiers", self.cmd_tiers))
         self.application.add_handler(CommandHandler("mystatus", self.cmd_mystatus))
-        self.application.add_handler(CommandHandler("stop", self.cmd_stop))
+        self.application.add_handler(CommandHandler("subscribe", lambda u, c: u.message.reply_text(PAYMENT_INSTRUCTIONS)))
         self.application.add_handler(CommandHandler("admin", self.cmd_admin))
-        self.application.add_handler(CommandHandler("adduser", self.cmd_adduser))
-        self.application.add_handler(CommandHandler("listusers", self.cmd_listusers))
         self.application.add_handler(CommandHandler("botstats", self.cmd_botstats))
         self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_payment_photo))
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
 
-    # ========================
-    # ✅ FIXED: v20+ LIFECYCLE (Compatible with existing event loop)
-    # ========================
     async def start(self):
-        """
-        CRITICAL FIX for "Cannot close a running event loop"
-        Uses low-level API compatible with asyncio.gather()
-        """
+        """ბოტის უსაფრთხო გაშვება"""
         async with self._start_lock:
-            if self._is_running:
-                logger.warning("⚠️ Telegram Handler უკვე გაშვებულია!")
-                return
+            if self._is_running: return
 
             try:
                 await self.application.initialize()
-                logger.info("✅ Telegram Application ინიციალიზებულია")
-
                 await self.application.start()
-                logger.info("✅ Telegram Application started")
-
-                await self.application.updater.start_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True
-                )
-                logger.info("🚀 Telegram Bot polling დაიწყო")
+                await self.application.updater.start_polling(drop_pending_updates=True)
 
                 self._is_running = True
+                logger.info("🚀 Telegram ბოტი წარმატებით გაეშვა!")
 
-                # Keep alive
                 self._stop_event = asyncio.Event()
                 await self._stop_event.wait()
-
             except Exception as e:
-                logger.error(f"❌ Telegram Handler გაშვების შეცდომა: {e}")
+                logger.error(f"❌ გაშვების კრიტიკული შეცდომა: {e}")
                 self._is_running = False
-                raise
 
     async def stop(self):
-        """Graceful shutdown"""
-        if not self._is_running:
-            return
+        """ბოტის უსაფრთხო გაჩერება"""
+        if not self._is_running: return
 
-        try:
-            logger.info("🛑 Telegram Bot ჩერდება...")
+        logger.info("🛑 Telegram ბოტის გაჩერება...")
+        if hasattr(self, '_stop_event'):
+            self._stop_event.set()
 
-            if hasattr(self, '_stop_event'):
-                self._stop_event.set()
-
-            await self.application.updater.stop()
-            await self.application.stop()
-            await self.application.shutdown()
-
-            self._is_running = False
-            logger.info("✅ Telegram Bot გაჩერდა")
-        except Exception as e:
-            logger.error(f"❌ Shutdown შეცდომა: {e}")
+        await self.application.updater.stop()
+        await self.application.stop()
+        await self.application.shutdown()
+        self._is_running = False

@@ -117,105 +117,142 @@ class MultiSourceDataProvider:
     def _init_symbol_mappings(self):
         """Initialize all symbol mappings"""
 
-        # CoinGecko IDs (crypto only)
+        # CoinGecko IDs (crypto only) - EXPANDED
         self.coingecko_ids = {
+            # Tier 1: Blue Chips
             "BTC/USD": "bitcoin",
             "ETH/USD": "ethereum",
             "BNB/USD": "binancecoin",
             "SOL/USD": "solana",
             "XRP/USD": "ripple",
             "ADA/USD": "cardano",
-            "DOGE/USD": "dogecoin",
-            "DOT/USD": "polkadot",
-            "LINK/USD": "chainlink",
             "AVAX/USD": "avalanche-2",
-            "LTC/USD": "litecoin",
-            "BCH/USD": "bitcoin-cash",
-            "UNI/USD": "uniswap",
-            "NEAR/USD": "near",
-            "ICP/USD": "internet-computer",
-            "HBAR/USD": "hedera-hashgraph",
+            "LINK/USD": "chainlink",
             "MATIC/USD": "matic-network",
+
+            # Tier 2: High Growth
+            "NEAR/USD": "near",
             "ARB/USD": "arbitrum",
             "OP/USD": "optimism",
-            "SUI/USD": "sui"
+            "SUI/USD": "sui",
+            "INJ/USD": "injective-protocol",
+            "APT/USD": "aptos",
+            "UNI/USD": "uniswap",
+            "DOT/USD": "polkadot",
+            "ATOM/USD": "cosmos",
+
+            # Tier 3: Meme/Volatility
+            "DOGE/USD": "dogecoin",
+            "PEPE/USD": "pepe",
+            "WIF/USD": "dogwifcoin",
+            "BONK/USD": "bonk",
+            "FLOKI/USD": "floki",
+
+            # Tier 4: Narrative Plays
+            "RNDR/USD": "render-token",
+            "FET/USD": "fetch-ai",
+            "AGIX/USD": "singularitynet",
+            "GALA/USD": "gala",
+            "IMX/USD": "immutable-x",
+
+            # Tier 5: Emerging
+            "SEI/USD": "sei-network",
+            "TIA/USD": "celestia",
+            "STRK/USD": "starknet",
+            "LTC/USD": "litecoin",
+            "BCH/USD": "bitcoin-cash",
         }
 
-        # Binance symbols (crypto only)
+        # Binance symbols (crypto only) - EXPANDED
         self.binance_symbols = {
+            # Tier 1
             "BTC/USD": "BTCUSDT",
             "ETH/USD": "ETHUSDT",
             "BNB/USD": "BNBUSDT",
             "SOL/USD": "SOLUSDT",
             "XRP/USD": "XRPUSDT",
             "ADA/USD": "ADAUSDT",
-            "DOGE/USD": "DOGEUSDT",
-            "DOT/USD": "DOTUSDT",
-            "LINK/USD": "LINKUSDT",
             "AVAX/USD": "AVAXUSDT",
-            "LTC/USD": "LTCUSDT",
-            "BCH/USD": "BCHUSDT",
-            "UNI/USD": "UNIUSDT",
-            "NEAR/USD": "NEARUSDT",
-            "ICP/USD": "ICPUSDT",
-            "HBAR/USD": "HBARUSDT",
+            "LINK/USD": "LINKUSDT",
             "MATIC/USD": "MATICUSDT",
+
+            # Tier 2
+            "NEAR/USD": "NEARUSDT",
             "ARB/USD": "ARBUSDT",
             "OP/USD": "OPUSDT",
-            "SUI/USD": "SUIUSDT"
+            "SUI/USD": "SUIUSDT",
+            "INJ/USD": "INJUSDT",
+            "APT/USD": "APTUSDT",
+            "UNI/USD": "UNIUSDT",
+            "DOT/USD": "DOTUSDT",
+            "ATOM/USD": "ATOMUSDT",
+
+            # Tier 3
+            "DOGE/USD": "DOGEUSDT",
+            "PEPE/USD": "PEPEUSDT",
+            "WIF/USD": "WIFUSDT",
+            "BONK/USD": "BONKUSDT",
+            "FLOKI/USD": "FLOKIUSDT",
+
+            # Tier 4
+            "RNDR/USD": "RNDRUSDT",
+            "FET/USD": "FETUSDT",
+            "AGIX/USD": "AGIXUSDT",
+            "GALA/USD": "GALAUSDT",
+            "IMX/USD": "IMXUSDT",
+
+            # Tier 5
+            "SEI/USD": "SEIUSDT",
+            "TIA/USD": "TIAUSDT",
+            "STRK/USD": "STRKUSDT",
+            "LTC/USD": "LTCUSDT",
+            "BCH/USD": "BCHUSDT",
         }
 
-        # Yahoo Finance symbols (crypto + stocks + commodities)
+        # Yahoo Finance symbols (crypto only) - EXPANDED
         self.yahoo_symbols = {
-            # Crypto
+            # Tier 1
             "BTC/USD": "BTC-USD",
             "ETH/USD": "ETH-USD",
             "BNB/USD": "BNB-USD",
             "SOL/USD": "SOL-USD",
             "XRP/USD": "XRP-USD",
             "ADA/USD": "ADA-USD",
-            "DOGE/USD": "DOGE-USD",
-            "DOT/USD": "DOT-USD",
-            "LINK/USD": "LINK-USD",
             "AVAX/USD": "AVAX-USD",
-            "LTC/USD": "LTC-USD",
-            "BCH/USD": "BCH-USD",
-            "UNI/USD": "UNI-USD",
-            "NEAR/USD": "NEAR-USD",
-            "ICP/USD": "ICP-USD",
-            "HBAR/USD": "HBAR-USD",
+            "LINK/USD": "LINK-USD",
             "MATIC/USD": "MATIC-USD",
+
+            # Tier 2
+            "NEAR/USD": "NEAR-USD",
             "ARB/USD": "ARB-USD",
             "OP/USD": "OP-USD",
             "SUI/USD": "SUI-USD",
-            # Stocks (already in correct format, but explicit mapping for clarity)
-            "AAPL": "AAPL",
-            "MSFT": "MSFT",
-            "GOOGL": "GOOGL",
-            "AMZN": "AMZN",
-            "NVDA": "NVDA",
-            "META": "META",
-            "TSLA": "TSLA",
-            "V": "V",
-            "JPM": "JPM",
-            "MA": "MA",
-            "PG": "PG",
-            "HD": "HD",
-            "NFLX": "NFLX",
-            "ADBE": "ADBE",
-            "AMD": "AMD",
-            "TSM": "TSM",
-            "ASML": "ASML",
-            "SNOW": "SNOW",
-            "SQ": "SQ",
-            "PYPL": "PYPL",
-            "XOM": "XOM",
-            "COST": "COST",
-            "CAT": "CAT",
-            # Commodities
-            "GOLD": "GC=F",  # Gold Futures
-            "SILVER": "SI=F",  # Silver Futures
-            "WTI": "CL=F"  # Crude Oil WTI Futures
+            "INJ/USD": "INJ-USD",
+            "APT/USD": "APT-USD",
+            "UNI/USD": "UNI-USD",
+            "DOT/USD": "DOT-USD",
+            "ATOM/USD": "ATOM-USD",
+
+            # Tier 3
+            "DOGE/USD": "DOGE-USD",
+            "PEPE/USD": "PEPE-USD",
+            "WIF/USD": "WIF-USD",
+            "BONK/USD": "BONK-USD",
+            "FLOKI/USD": "FLOKI-USD",
+
+            # Tier 4
+            "RNDR/USD": "RNDR-USD",
+            "FET/USD": "FET-USD",
+            "AGIX/USD": "AGIX-USD",
+            "GALA/USD": "GALA-USD",
+            "IMX/USD": "IMX-USD",
+
+            # Tier 5
+            "SEI/USD": "SEI-USD",
+            "TIA/USD": "TIA-USD",
+            "STRK/USD": "STRK-USD",
+            "LTC/USD": "LTC-USD",
+            "BCH/USD": "BCH-USD",
         }
 
     def _is_crypto(self, symbol: str) -> bool:

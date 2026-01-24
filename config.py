@@ -1,5 +1,7 @@
 """
-AI Trading Bot - Configuration (Multi-Source Optimized)
+AI Trading Bot - Configuration (CRYPTO-ONLY VERSION)
+✅ 30+ კრიპტოვალუტა სრული დაფარვა
+✅ Multi-source fallback (CoinGecko → Binance → Yahoo)
 """
 
 # ========================
@@ -11,14 +13,14 @@ ADMIN_ID = 6564836899
 # ========================
 # API KEYS & PROVIDERS
 # ========================
-# Primary provider (fallback)
+# Primary provider (fallback only, not main)
 TWELVE_DATA_API_KEY = "c512e8ccb9ae4637a613152481546749"
 
-# Optional providers (leave None if not using)
-ALPACA_API_KEY = None  # Get free key at: https://alpaca.markets
+# Optional providers (not needed for crypto-only mode)
+ALPACA_API_KEY = None
 ALPACA_SECRET_KEY = None
 
-# Note: Binance and Yahoo Finance don't require API keys for public market data
+# Note: CoinGecko, Binance, Yahoo Finance don't require API keys
 
 # ========================
 # FILE PATHS
@@ -30,102 +32,136 @@ CACHE_FILE = "market_cache.json"
 PDF_FOLDER = "My-AI-Agent_needs"
 
 # ========================
-# TRADING ASSETS
+# CRYPTO ASSETS (30+ TOP PERFORMERS)
 # ========================
-# Crypto assets (multi-source compatible format)
-CRYPTO = [
-    "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD",
-    "ADA/USD", "DOGE/USD", "DOT/USD", "LINK/USD",
-    "AVAX/USD", "LTC/USD", "BCH/USD", "UNI/USD", 
-    "NEAR/USD", "ICP/USD", "HBAR/USD"
+
+# 🔵 Tier 1: Blue Chips (სტაბილური, დიდი კაპიტალიზაცია)
+TIER_1_BLUE_CHIPS = [
+    "BTC/USD",   # Bitcoin - ბაზრის ბირთვი
+    "ETH/USD",   # Ethereum - DeFi + NFT ხერხემალი
+    "BNB/USD",   # Binance Coin - ძლიერი მხარდაჭერა
+    "SOL/USD",   # Solana - სწრაფი ეკოსისტემა
+    "XRP/USD",   # Ripple - მკვეთრი სპაიკები
+    "ADA/USD",   # Cardano - აკადემიური მიდგომა
+    "AVAX/USD",  # Avalanche - სუბნეტები + ინსტიტუციური
+    "LINK/USD",  # Chainlink - Oracle მონოპოლია
+    "MATIC/USD", # Polygon - Ethereum scaling
 ]
 
-# Stock assets
-STOCKS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "V", "JPM", "MA", "PG", "HD", "NFLX", "ADBE", "AMD",
-    "TSM", "ASML", "SNOW", "SQ", "PYPL", "XOM", "COST", "CAT"
+# 🟢 Tier 2: High Growth (მაღალი ზრდის პოტენციალი)
+TIER_2_HIGH_GROWTH = [
+    "NEAR/USD",  # Near Protocol - user-friendly Web3
+    "ARB/USD",   # Arbitrum - L2 ლიდერი
+    "OP/USD",    # Optimism - L2 კონკურენტი
+    "SUI/USD",   # Sui - ახალი L1
+    "INJ/USD",   # Injective - DeFi + DEX
+    "APT/USD",   # Aptos - Move language
+    "UNI/USD",   # Uniswap - DEX ლიდერი
+    "DOT/USD",   # Polkadot - Parachains
+    "ATOM/USD",  # Cosmos - IBC ინტერნეტი
 ]
 
-# Commodities
-COMMODITIES = [
-    "GOLD", "SILVER", "WTI"
+# 🟡 Tier 3: Meme/Volatility (მაღალი ვოლატილობა, სწრაფი მოგება)
+TIER_3_MEME_COINS = [
+    "DOGE/USD",  # Dogecoin - ნიუსზე რეაქცია
+    "PEPE/USD",  # Pepe - მაღალი ვოლატილობა
+    "WIF/USD",   # Dogwifhat - Solana meme
+    "BONK/USD",  # Bonk - Solana meme
+    "FLOKI/USD", # Floki Inu - მემე + utility
 ]
+
+# 🟣 Tier 4: Narrative Plays (AI, Gaming, RWA)
+TIER_4_NARRATIVE = [
+    "RNDR/USD",  # Render - AI + GPU narrative
+    "FET/USD",   # Fetch.ai - AI agents
+    "AGIX/USD",  # SingularityNET - AGI
+    "GALA/USD",  # Gala Games - Web3 gaming
+    "IMX/USD",   # Immutable X - NFT gaming L2
+]
+
+# 🔴 Tier 5: New/Emerging (ახალი პროექტები, მაღალი რისკი)
+TIER_5_EMERGING = [
+    "SEI/USD",   # Sei Network - DeFi optimized L1
+    "TIA/USD",   # Celestia - Modular blockchain
+    "STRK/USD",  # Starknet - ZK-rollup
+    "LTC/USD",   # Litecoin - "silver to Bitcoin's gold"
+    "BCH/USD",   # Bitcoin Cash - payments focus
+]
+
+# ✅ COMBINED LIST (all tiers)
+CRYPTO = (
+    TIER_1_BLUE_CHIPS +
+    TIER_2_HIGH_GROWTH +
+    TIER_3_MEME_COINS +
+    TIER_4_NARRATIVE +
+    TIER_5_EMERGING
+)
+
+# ❌ REMOVED: Stocks and Commodities (crypto-only strategy)
+STOCKS = []
+COMMODITIES = []
 
 # ========================
-# TRADING PARAMETERS (OPTIMIZED FOR 30-MIN CYCLES)
+# TRADING PARAMETERS (OPTIMIZED FOR CRYPTO)
 # ========================
 INTERVAL = "1h"
 
-# ✅ NEW: 30-minute full scan cycle (instead of 7 minutes)
-# Total assets: ~43 (16 crypto + 24 stocks + 3 commodities)
-# Cycle time: 1800 seconds (30 minutes)
-# Delay per asset: 1800 / 43 ≈ 42 seconds
-SCAN_INTERVAL = 1800  # Full cycle: 30 minutes
+# ✅ Crypto-optimized scan cycle
+# Total crypto assets: ~34
+# Cycle time: 900 seconds (15 minutes) - faster for volatile crypto market
+# Delay per asset: 900 / 34 ≈ 26 seconds (safe for all APIs)
+SCAN_INTERVAL = 900  # 15 minutes (crypto markets move fast)
 
-# ✅ NEW: Smart delay between assets
-# With multi-source fallback, we don't need aggressive delays
-# 15 seconds is enough for smooth distribution
-ASSET_DELAY = 15  # Delay between each asset fetch
+# Asset delay (smooth distribution)
+ASSET_DELAY = 10  # 10 seconds between each crypto (faster than stocks)
 
 # Notification settings
-NOTIFICATION_COOLDOWN = 7200  # Don't spam same signal within 2 hours
+NOTIFICATION_COOLDOWN = 3600  # 1 hour (crypto moves fast, reduce from 2h)
 STOP_LOSS_PERCENT = 5.0
 TAKE_PROFIT_PERCENT = 10.0
-MAX_HOLD_HOURS = 72
+MAX_HOLD_HOURS = 48  # Crypto trades shorter than stocks
 
 # ========================
-# RATE LIMITS (Per Source - Handled by MultiSourceDataProvider)
+# AI SETTINGS (CRYPTO-TUNED)
 # ========================
-# These are now managed internally by market_data.py
-# Binance: 1200 requests/minute (weight system)
-# Alpaca: 200 requests/minute
-# Yahoo: ~2000 requests/hour
-# TwelveData: 8 requests/minute (free tier)
-
-# Legacy (kept for backwards compatibility, not used)
-MAX_TD_REQUESTS_PER_MINUTE = 8
-MAX_TD_REQUESTS_PER_DAY = 800
+AI_ENTRY_THRESHOLD = 65  # Lower threshold for crypto (more volatile)
+AI_CONFIDENCE_HIGH = 80
+AI_CONFIDENCE_LOW = 40
 
 # ========================
-# AI SETTINGS
-# ========================
-AI_ENTRY_THRESHOLD = 70  
-AI_CONFIDENCE_HIGH = 85  
-AI_CONFIDENCE_LOW = 40   
-
-# ========================
-# MESSAGE TEMPLATES
+# MESSAGE TEMPLATES (CRYPTO-FOCUSED)
 # ========================
 WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
 
-🚀 AI Trading Bot (Multi-Source Data Provider)
+🚀 AI Crypto Trading Bot (Multi-Source Data)
 
 📊 მონიტორინგი:
 • {crypto_count} კრიპტოვალუტა
-• {stocks_count} აქცია
-• {commodities_count} საქონელი
+• 5 კატეგორია (Blue Chips → Meme Coins)
+• 15-წუთიანი სკანირება
 
 💰 ფასი: 150₾ / თვე
 
 📌 ბრძანებები:
 /subscribe - გამოწერა
 /mystatus - სტატუსი
+/tiers - კატეგორიები
 /stop - გაუქმება
 
 ❓ დახმარებისთვის: https://t.me/Kagurashinakami"""
 
 PAYMENT_INSTRUCTIONS = """💳 **გადახდის ინსტრუქცია**
+საქართველოს ანგარიში (Bog): GE70BG0000000538913702  ლ.გ
 
 გადაიხადეთ 150₾ ბანკის ბარათზე და გამოგზავნეთ ქვითარი აქ.
 
 📌 ადმინი დაადასტურებს 24 საათში."""
 
-BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{asset_type}]
+BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{tier}]
 
-💵 ფასი: ${price:.2f}
+💵 ფასი: ${price:.4f}
 📊 RSI: {rsi:.1f}
-📈 EMA200: ${ema200:.2f}
+📈 EMA200: ${ema200:.4f}
 🧠 AI Score: {ai_score}/100
 🔌 წყარო: {data_source}
 
@@ -137,15 +173,48 @@ BUY_SIGNAL_TEMPLATE = """🟢 AI იყიდე: {asset} [{asset_type}]
 🟢 Take-Profit: +{tp_percent}%
 💰 პოტენციური მოგება: +{estimated_tp:.1f}%"""
 
-SELL_SIGNAL_TEMPLATE = """{emoji} გაყიდე: {asset} [{asset_type}]
+SELL_SIGNAL_TEMPLATE = """{emoji} გაყიდე: {asset} [{tier}]
 
-📊 შესვლა: ${entry_price:.2f}
-📊 გასვლა: ${exit_price:.2f}
+📊 შესვლა: ${entry_price:.4f}
+📊 გასვლა: ${exit_price:.4f}
 💰 მოგება/ზარალი: {profit:+.2f}%
 💵 ბალანსი (1$): ${balance:.4f}
 ⏱️ ხანგრძლივობა: {hours:.1f}სთ
 
 📌 მიზეზი: {reason}"""
 
-# ყველა სიგნალის ბოლოში დაემატება
+# Guide footer
 GUIDE_FOOTER = "\n\n━━━━━━━━━━━━━━\n📖 **არ გესმით რა არის RSI, EMA, Stop-Loss?**\nგამოიყენეთ: /guide"
+
+# ========================
+# TIER DESCRIPTIONS (for /tiers command)
+# ========================
+TIER_DESCRIPTIONS = """
+📊 **კრიპტო კატეგორიები:**
+
+🔵 **Tier 1: Blue Chips** ({blue_chip_count})
+სტაბილური, დიდი კაპიტალიზაცია
+მაგალითი: BTC, ETH, BNB, SOL
+
+🟢 **Tier 2: High Growth** ({high_growth_count})
+მაღალი ზრდის პოტენციალი
+მაგალითი: NEAR, ARB, OP, SUI
+
+🟡 **Tier 3: Meme Coins** ({meme_count})
+მაღალი ვოლატილობა, სწრაფი მოგება
+მაგალითი: DOGE, PEPE, WIF, BONK
+
+🟣 **Tier 4: Narratives** ({narrative_count})
+AI, Gaming, RWA თემატიკა
+მაგალითი: RNDR, FET, GALA, IMX
+
+🔴 **Tier 5: Emerging** ({emerging_count})
+ახალი პროექტები, მაღალი რისკი
+მაგალითი: SEI, TIA, STRK
+""".format(
+    blue_chip_count=len(TIER_1_BLUE_CHIPS),
+    high_growth_count=len(TIER_2_HIGH_GROWTH),
+    meme_count=len(TIER_3_MEME_COINS),
+    narrative_count=len(TIER_4_NARRATIVE),
+    emerging_count=len(TIER_5_EMERGING)
+)
