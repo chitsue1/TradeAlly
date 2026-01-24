@@ -1,5 +1,6 @@
 """
-AI Trading Bot - Trading Engine (Production v2.0)
+AI Trading Bot - Trading Engine (Production v2.1)
+✅ FIXED: Debug logging for signal detection
 ✅ Integrated with MultiSourceDataProvider
 ✅ Circuit Breaker aware
 ✅ Enhanced logging
@@ -84,7 +85,14 @@ class TradingEngine:
         self.stats = {
             'total_signals': 0,
             'successful_trades': 0,
-            'failed_trades': 0
+            'failed_trades': 0,
+            'signals_by_tier': {
+                'BLUE_CHIP': 0,
+                'HIGH_GROWTH': 0,
+                'MEME': 0,
+                'NARRATIVE': 0,
+                'EMERGING': 0
+            }
         }
 
         logger.info("✅ TradingEngine initialized")
@@ -213,26 +221,41 @@ class TradingEngine:
         if data['rsi'] < 30:
             score += 40
             reasons.append(f"📉 გადაყიდულია (RSI: {data['rsi']:.1f})")
+        elif data['rsi'] < 40:
+            score += 25
+            reasons.append(f"📉 დაბალი RSI ({data['rsi']:.1f})")
 
         # 2. ტრენდის ანალიზი (EMA200)
         if data['price'] > data['ema200']:
             score += 20
             reasons.append("📈 გრძელვადიანი ტრენდი აღმავალია")
+        elif data['price'] > data['ema200'] * 0.98:
+            score += 10
+            reasons.append("📈 ტრენდთან ახლოს")
 
         # 3. Bollinger Bands
         if data['price'] <= data['bb_low']:
             score += 25
             reasons.append("🎯 ფასი ქვედა ბოლინჯერზეა")
+        elif data['price'] <= data['bb_low'] * 1.02:
+            score += 15
+            reasons.append("🎯 ბოლინჯერის ქვედა ზოლთან ახლოს")
 
         # 4. ბაზრის ზოგადი განწყობა (Fear & Greed)
         if sentiment.get('fg_index', 50) < 30:
             score += 15
             reasons.append(f"😱 ბაზარზე პანიკაა ({sentiment['fg_index']})")
+        elif sentiment.get('fg_index', 50) < 40:
+            score += 8
+            reasons.append(f"😰 ბაზარზე შიში ({sentiment['fg_index']})")
 
         # 5. PDF ცოდნის შემოწმება
         if any(p in str(reasons).lower() for p in self.knowledge.get('patterns', [])):
             score += 10
             reasons.append("🧠 PDF ცოდნამ დაადასტურა ნიმუში")
+
+        # ✅ DEBUG: Always log the score
+        logger.debug(f"📊 AI Score for {symbol}: {score}/100 | Threshold: {AI_ENTRY_THRESHOLD}")
 
         return score, reasons
 
@@ -255,16 +278,22 @@ class TradingEngine:
 
         if symbol in TIER_1_BLUE_CHIPS:
             tier = "🔵 BLUE CHIP"
+            tier_key = "BLUE_CHIP"
         elif symbol in TIER_2_HIGH_GROWTH:
             tier = "🟢 HIGH GROWTH"
+            tier_key = "HIGH_GROWTH"
         elif symbol in TIER_3_MEME_COINS:
             tier = "🟡 MEME"
+            tier_key = "MEME"
         elif symbol in TIER_4_NARRATIVE:
             tier = "🟣 NARRATIVE"
+            tier_key = "NARRATIVE"
         elif symbol in TIER_5_EMERGING:
             tier = "🔴 EMERGING"
+            tier_key = "EMERGING"
         else:
             tier = "CRYPTO"
+            tier_key = "OTHER"
 
         # Format message using template from config
         message = BUY_SIGNAL_TEMPLATE.format(
@@ -285,6 +314,7 @@ class TradingEngine:
         try:
             await self.telegram_handler.broadcast_signal(message, symbol)
             self.stats['total_signals'] += 1
+            self.stats['signals_by_tier'][tier_key] += 1
             logger.info(f"📤 Buy signal sent for {symbol} [{tier}]")
         except Exception as e:
             logger.error(f"❌ Failed to send signal for {symbol}: {e}")
@@ -298,12 +328,14 @@ class TradingEngine:
         logger.info(f"📊 Assets: {len(all_assets)}")
         logger.info(f"⏱️ Cycle: {SCAN_INTERVAL/60:.1f} min | Delay: {ASSET_DELAY}s")
         logger.info(f"🔌 Mode: {'Multi-Source' if self.use_multi_source else 'TwelveData'}")
+        logger.info(f"🎯 AI Threshold: {AI_ENTRY_THRESHOLD}")
         logger.info("="*60)
 
         scan_start = time.time()
         success_count = 0
         fail_count = 0
         signals_found = 0
+        near_miss_count = 0
 
         for i, symbol in enumerate(all_assets, 1):
             try:
@@ -322,11 +354,18 @@ class TradingEngine:
                     sentiment = {"fg_index": 32}  # Mock sentiment
                     ai_score, reasons = await self.ai_analyze_signal(symbol, data, sentiment)
 
-                    # ✅ Signal detection
+                    # ✅ Signal detection with DEBUG
                     if ai_score >= AI_ENTRY_THRESHOLD:
                         signals_found += 1
-                        logger.info(f"🎯 SIGNAL DETECTED: {symbol} (Score: {ai_score})")
+                        logger.info(f"🎯 SIGNAL DETECTED: {symbol} (Score: {ai_score}/{AI_ENTRY_THRESHOLD})")
                         await self.send_buy_signal(symbol, data, ai_score, reasons)
+                    else:
+                        # ✅ DEBUG: Log near misses
+                        if ai_score >= AI_ENTRY_THRESHOLD - 10:
+                            near_miss_count += 1
+                            logger.info(f"⚠️ NEAR MISS: {symbol} (Score: {ai_score}/{AI_ENTRY_THRESHOLD}) - Just {AI_ENTRY_THRESHOLD - ai_score} points away!")
+                        else:
+                            logger.debug(f"❌ No signal: {symbol} (Score: {ai_score}/{AI_ENTRY_THRESHOLD})")
 
                 # Delay before next asset
                 await asyncio.sleep(ASSET_DELAY)
@@ -344,7 +383,8 @@ class TradingEngine:
         logger.info(f"⏱️ Duration: {scan_duration/60:.1f} min")
         logger.info(f"📊 Success: {success_count}/{len(all_assets)} ({success_rate:.1f}%)")
         logger.info(f"❌ Failed: {fail_count}")
-        logger.info(f"🎯 Signals: {signals_found}")
+        logger.info(f"🎯 Signals Found: {signals_found}")
+        logger.info(f"⚠️ Near Misses: {near_miss_count} (within 10 points of threshold)")
 
         # ✅ Provider statistics
         if self.use_multi_source:

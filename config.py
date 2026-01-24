@@ -1,7 +1,8 @@
 """
 AI Trading Bot - Configuration (CRYPTO-ONLY VERSION)
-✅ 30+ კრიპტოვალუტა სრული დაფარვა
+✅ 34 კრიპტოვალუტა სრული დაფარვა
 ✅ Multi-source fallback (CoinGecko → Binance → Yahoo)
+✅ FIXED: AI_ENTRY_THRESHOLD, NOTIFICATION_COOLDOWN
 """
 
 # ========================
@@ -32,7 +33,7 @@ CACHE_FILE = "market_cache.json"
 PDF_FOLDER = "My-AI-Agent_needs"
 
 # ========================
-# CRYPTO ASSETS (30+ TOP PERFORMERS)
+# CRYPTO ASSETS (34 TOP PERFORMERS)
 # ========================
 
 # 🔵 Tier 1: Blue Chips (სტაბილური, დიდი კაპიტალიზაცია)
@@ -46,6 +47,7 @@ TIER_1_BLUE_CHIPS = [
     "AVAX/USD",  # Avalanche - სუბნეტები + ინსტიტუციური
     "LINK/USD",  # Chainlink - Oracle მონოპოლია
     "MATIC/USD", # Polygon - Ethereum scaling
+    "DOT/USD",   # Polkadot - Parachains
 ]
 
 # 🟢 Tier 2: High Growth (მაღალი ზრდის პოტენციალი)
@@ -57,7 +59,6 @@ TIER_2_HIGH_GROWTH = [
     "INJ/USD",   # Injective - DeFi + DEX
     "APT/USD",   # Aptos - Move language
     "UNI/USD",   # Uniswap - DEX ლიდერი
-    "DOT/USD",   # Polkadot - Parachains
     "ATOM/USD",  # Cosmos - IBC ინტერნეტი
 ]
 
@@ -86,6 +87,7 @@ TIER_5_EMERGING = [
     "STRK/USD",  # Starknet - ZK-rollup
     "LTC/USD",   # Litecoin - "silver to Bitcoin's gold"
     "BCH/USD",   # Bitcoin Cash - payments focus
+    "TON/USD",   # Toncoin - Telegram blockchain
 ]
 
 # ✅ COMBINED LIST (all tiers)
@@ -107,7 +109,7 @@ COMMODITIES = []
 INTERVAL = "1h"
 
 # ✅ Crypto-optimized scan cycle
-# Total crypto assets: ~34
+# Total crypto assets: 34
 # Cycle time: 900 seconds (15 minutes) - faster for volatile crypto market
 # Delay per asset: 900 / 34 ≈ 26 seconds (safe for all APIs)
 SCAN_INTERVAL = 900  # 15 minutes (crypto markets move fast)
@@ -115,8 +117,8 @@ SCAN_INTERVAL = 900  # 15 minutes (crypto markets move fast)
 # Asset delay (smooth distribution)
 ASSET_DELAY = 10  # 10 seconds between each crypto (faster than stocks)
 
-# Notification settings
-NOTIFICATION_COOLDOWN = 3600  # 1 hour (crypto moves fast, reduce from 2h)
+# 🔧 FIXED: Notification settings
+NOTIFICATION_COOLDOWN = 1800  # ✅ 30 minutes (was 1 hour - too long for crypto!)
 STOP_LOSS_PERCENT = 5.0
 TAKE_PROFIT_PERCENT = 10.0
 MAX_HOLD_HOURS = 48  # Crypto trades shorter than stocks
@@ -124,7 +126,11 @@ MAX_HOLD_HOURS = 48  # Crypto trades shorter than stocks
 # ========================
 # AI SETTINGS (CRYPTO-TUNED)
 # ========================
-AI_ENTRY_THRESHOLD = 65  # Lower threshold for crypto (more volatile)
+# 🔧 CRITICAL FIX: AI_ENTRY_THRESHOLD
+# Old value: 65 (too high! Average score is 40-55)
+# New value: 45 (realistic threshold that will actually trigger signals)
+AI_ENTRY_THRESHOLD = 45  # ✅ FIXED from 65
+
 AI_CONFIDENCE_HIGH = 80
 AI_CONFIDENCE_LOW = 40
 
@@ -218,3 +224,16 @@ AI, Gaming, RWA თემატიკა
     narrative_count=len(TIER_4_NARRATIVE),
     emerging_count=len(TIER_5_EMERGING)
 )
+
+# ========================
+# VALIDATION (დეველოპერისთვის)
+# ========================
+if __name__ == "__main__":
+    print("="*60)
+    print("📊 CONFIG VALIDATION")
+    print("="*60)
+    print(f"Total CRYPTO: {len(CRYPTO)}")
+    print(f"AI_ENTRY_THRESHOLD: {AI_ENTRY_THRESHOLD}")
+    print(f"NOTIFICATION_COOLDOWN: {NOTIFICATION_COOLDOWN}s ({NOTIFICATION_COOLDOWN/60:.0f} min)")
+    print(f"SCAN_INTERVAL: {SCAN_INTERVAL}s ({SCAN_INTERVAL/60:.0f} min)")
+    print("="*60)

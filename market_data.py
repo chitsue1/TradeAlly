@@ -1,10 +1,10 @@
 """
-Market Data Provider - PRODUCTION VERSION v2.0
+Market Data Provider - PRODUCTION VERSION v2.1
+✅ FIXED: ყველა 34 კრიპტო დამატებულია
 ✅ Integrated with existing Trading Engine
 ✅ Sources: CoinGecko → Binance → Yahoo Finance
 ✅ Circuit Breaker + Exponential Backoff
 ✅ Singleton Pattern
-✅ Compatible with config.py settings
 """
 
 import asyncio
@@ -115,11 +115,11 @@ class MultiSourceDataProvider:
         logger.info("🟢 MultiSourceDataProvider initialized (Singleton)")
 
     def _init_symbol_mappings(self):
-        """Initialize all symbol mappings"""
+        """Initialize all symbol mappings - ✅ FIXED: ყველა 34 კრიპტო"""
 
-        # CoinGecko IDs (crypto only) - EXPANDED
+        # CoinGecko IDs (crypto only) - ✅ 34 COMPLETE
         self.coingecko_ids = {
-            # Tier 1: Blue Chips
+            # Tier 1: Blue Chips (10)
             "BTC/USD": "bitcoin",
             "ETH/USD": "ethereum",
             "BNB/USD": "binancecoin",
@@ -129,8 +129,9 @@ class MultiSourceDataProvider:
             "AVAX/USD": "avalanche-2",
             "LINK/USD": "chainlink",
             "MATIC/USD": "matic-network",
+            "DOT/USD": "polkadot",  # ✅ დამატებული
 
-            # Tier 2: High Growth
+            # Tier 2: High Growth (8)
             "NEAR/USD": "near",
             "ARB/USD": "arbitrum",
             "OP/USD": "optimism",
@@ -138,34 +139,34 @@ class MultiSourceDataProvider:
             "INJ/USD": "injective-protocol",
             "APT/USD": "aptos",
             "UNI/USD": "uniswap",
-            "DOT/USD": "polkadot",
             "ATOM/USD": "cosmos",
 
-            # Tier 3: Meme/Volatility
+            # Tier 3: Meme/Volatility (5)
             "DOGE/USD": "dogecoin",
             "PEPE/USD": "pepe",
             "WIF/USD": "dogwifcoin",
             "BONK/USD": "bonk",
             "FLOKI/USD": "floki",
 
-            # Tier 4: Narrative Plays
+            # Tier 4: Narrative Plays (5)
             "RNDR/USD": "render-token",
             "FET/USD": "fetch-ai",
             "AGIX/USD": "singularitynet",
             "GALA/USD": "gala",
             "IMX/USD": "immutable-x",
 
-            # Tier 5: Emerging
+            # Tier 5: Emerging (6)
             "SEI/USD": "sei-network",
             "TIA/USD": "celestia",
             "STRK/USD": "starknet",
             "LTC/USD": "litecoin",
             "BCH/USD": "bitcoin-cash",
+            "TON/USD": "the-open-network",  # ✅ დამატებული
         }
 
-        # Binance symbols (crypto only) - EXPANDED
+        # Binance symbols (crypto only) - ✅ 34 COMPLETE
         self.binance_symbols = {
-            # Tier 1
+            # Tier 1 (10)
             "BTC/USD": "BTCUSDT",
             "ETH/USD": "ETHUSDT",
             "BNB/USD": "BNBUSDT",
@@ -175,8 +176,9 @@ class MultiSourceDataProvider:
             "AVAX/USD": "AVAXUSDT",
             "LINK/USD": "LINKUSDT",
             "MATIC/USD": "MATICUSDT",
+            "DOT/USD": "DOTUSDT",  # ✅ დამატებული
 
-            # Tier 2
+            # Tier 2 (8)
             "NEAR/USD": "NEARUSDT",
             "ARB/USD": "ARBUSDT",
             "OP/USD": "OPUSDT",
@@ -184,34 +186,34 @@ class MultiSourceDataProvider:
             "INJ/USD": "INJUSDT",
             "APT/USD": "APTUSDT",
             "UNI/USD": "UNIUSDT",
-            "DOT/USD": "DOTUSDT",
             "ATOM/USD": "ATOMUSDT",
 
-            # Tier 3
+            # Tier 3 (5)
             "DOGE/USD": "DOGEUSDT",
             "PEPE/USD": "PEPEUSDT",
             "WIF/USD": "WIFUSDT",
             "BONK/USD": "BONKUSDT",
             "FLOKI/USD": "FLOKIUSDT",
 
-            # Tier 4
+            # Tier 4 (5)
             "RNDR/USD": "RNDRUSDT",
             "FET/USD": "FETUSDT",
             "AGIX/USD": "AGIXUSDT",
             "GALA/USD": "GALAUSDT",
             "IMX/USD": "IMXUSDT",
 
-            # Tier 5
+            # Tier 5 (6)
             "SEI/USD": "SEIUSDT",
             "TIA/USD": "TIAUSDT",
             "STRK/USD": "STRKUSDT",
             "LTC/USD": "LTCUSDT",
             "BCH/USD": "BCHUSDT",
+            "TON/USD": "TONUSDT",  # ✅ დამატებული
         }
 
-        # Yahoo Finance symbols (crypto only) - EXPANDED
+        # Yahoo Finance symbols (crypto only) - ✅ 34 COMPLETE
         self.yahoo_symbols = {
-            # Tier 1
+            # Tier 1 (10)
             "BTC/USD": "BTC-USD",
             "ETH/USD": "ETH-USD",
             "BNB/USD": "BNB-USD",
@@ -221,8 +223,9 @@ class MultiSourceDataProvider:
             "AVAX/USD": "AVAX-USD",
             "LINK/USD": "LINK-USD",
             "MATIC/USD": "MATIC-USD",
+            "DOT/USD": "DOT-USD",  # ✅ დამატებული
 
-            # Tier 2
+            # Tier 2 (8)
             "NEAR/USD": "NEAR-USD",
             "ARB/USD": "ARB-USD",
             "OP/USD": "OP-USD",
@@ -230,29 +233,29 @@ class MultiSourceDataProvider:
             "INJ/USD": "INJ-USD",
             "APT/USD": "APT-USD",
             "UNI/USD": "UNI-USD",
-            "DOT/USD": "DOT-USD",
             "ATOM/USD": "ATOM-USD",
 
-            # Tier 3
+            # Tier 3 (5)
             "DOGE/USD": "DOGE-USD",
             "PEPE/USD": "PEPE-USD",
             "WIF/USD": "WIF-USD",
             "BONK/USD": "BONK-USD",
             "FLOKI/USD": "FLOKI-USD",
 
-            # Tier 4
+            # Tier 4 (5)
             "RNDR/USD": "RNDR-USD",
             "FET/USD": "FET-USD",
             "AGIX/USD": "AGIX-USD",
             "GALA/USD": "GALA-USD",
             "IMX/USD": "IMX-USD",
 
-            # Tier 5
+            # Tier 5 (6)
             "SEI/USD": "SEI-USD",
             "TIA/USD": "TIA-USD",
             "STRK/USD": "STRK-USD",
             "LTC/USD": "LTC-USD",
             "BCH/USD": "BCH-USD",
+            "TON/USD": "TON-USD",  # ✅ დამატებული
         }
 
     def _is_crypto(self, symbol: str) -> bool:
