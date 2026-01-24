@@ -117,7 +117,7 @@ class MultiSourceDataProvider:
     def _init_symbol_mappings(self):
         """Initialize all symbol mappings"""
 
-        # CoinGecko IDs
+        # CoinGecko IDs (crypto only)
         self.coingecko_ids = {
             "BTC/USD": "bitcoin",
             "ETH/USD": "ethereum",
@@ -141,7 +141,7 @@ class MultiSourceDataProvider:
             "SUI/USD": "sui"
         }
 
-        # Binance symbols
+        # Binance symbols (crypto only)
         self.binance_symbols = {
             "BTC/USD": "BTCUSDT",
             "ETH/USD": "ETHUSDT",
@@ -165,8 +165,9 @@ class MultiSourceDataProvider:
             "SUI/USD": "SUIUSDT"
         }
 
-        # Yahoo Finance symbols
+        # Yahoo Finance symbols (crypto + stocks + commodities)
         self.yahoo_symbols = {
+            # Crypto
             "BTC/USD": "BTC-USD",
             "ETH/USD": "ETH-USD",
             "BNB/USD": "BNB-USD",
@@ -186,12 +187,44 @@ class MultiSourceDataProvider:
             "MATIC/USD": "MATIC-USD",
             "ARB/USD": "ARB-USD",
             "OP/USD": "OP-USD",
-            "SUI/USD": "SUI-USD"
+            "SUI/USD": "SUI-USD",
+            # Stocks (already in correct format, but explicit mapping for clarity)
+            "AAPL": "AAPL",
+            "MSFT": "MSFT",
+            "GOOGL": "GOOGL",
+            "AMZN": "AMZN",
+            "NVDA": "NVDA",
+            "META": "META",
+            "TSLA": "TSLA",
+            "V": "V",
+            "JPM": "JPM",
+            "MA": "MA",
+            "PG": "PG",
+            "HD": "HD",
+            "NFLX": "NFLX",
+            "ADBE": "ADBE",
+            "AMD": "AMD",
+            "TSM": "TSM",
+            "ASML": "ASML",
+            "SNOW": "SNOW",
+            "SQ": "SQ",
+            "PYPL": "PYPL",
+            "XOM": "XOM",
+            "COST": "COST",
+            "CAT": "CAT",
+            # Commodities
+            "GOLD": "GC=F",  # Gold Futures
+            "SILVER": "SI=F",  # Silver Futures
+            "WTI": "CL=F"  # Crude Oil WTI Futures
         }
 
     def _is_crypto(self, symbol: str) -> bool:
-        """Detect if symbol is crypto"""
-        return symbol in self.coingecko_ids or "/" in symbol
+        """
+        Detect if symbol is crypto
+        CRITICAL: Must be accurate to avoid wasting API calls
+        """
+        # Explicitly check if in crypto mappings
+        return symbol in self.coingecko_ids
 
     # ═══════════════════════════════════════════════════════════════
     # CIRCUIT BREAKER LOGIC
@@ -483,7 +516,7 @@ class MultiSourceDataProvider:
         🎯 INTELLIGENT FALLBACK CASCADE
 
         Crypto: CoinGecko → Binance → Yahoo
-        Stocks: Yahoo only
+        Stocks/Commodities: Yahoo ONLY (skip crypto sources)
 
         Returns MarketData or None
         """
@@ -495,17 +528,21 @@ class MultiSourceDataProvider:
                 logger.debug(f"💾 Cache hit: {symbol}")
                 return cached_data
 
-        # Determine source priority
+        # ✅ CRITICAL FIX: Determine source priority based on asset type
         is_crypto = self._is_crypto(symbol)
 
         if is_crypto:
+            # Crypto: Try all sources
             sources = [
                 ("coingecko", self._fetch_coingecko),
                 ("binance", self._fetch_binance),
                 ("yahoo", self._fetch_yahoo)
             ]
+            logger.debug(f"🔍 {symbol} identified as CRYPTO")
         else:
+            # Stocks/Commodities: Yahoo ONLY
             sources = [("yahoo", self._fetch_yahoo)]
+            logger.debug(f"🔍 {symbol} identified as STOCK/COMMODITY (Yahoo only)")
 
         # Try each source
         for source_name, fetch_func in sources:
