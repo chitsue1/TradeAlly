@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 
-# ივარაუდება, რომ config.py-ში გაქვს ყველა საჭირო ცვლადი (TOKEN, ADMIN_ID და ა.შ.)
+# ✅ FIXED: Import ALL message templates from config
 from config import *
 
 logger = logging.getLogger(__name__)
@@ -98,62 +98,194 @@ class TelegramHandler:
     # მომხმარებლის ბრძანებები
     # ========================
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """✅ FIXED: გამოიყენებს WELCOME_MSG_TEMPLATE config-დან"""
         username = update.effective_user.username or "მომხმარებელი"
+
+        # ✅ სწორად ივსება template config-დან
         welcome_msg = WELCOME_MSG_TEMPLATE.format(
             username=username,
+            crypto_count=len(CRYPTO),  # 34
             ai_info="აქტიური 🧠",
-            crypto_count="50+",
-            stocks_count="Top 100",
-            commodities_count="Gold/Oil"
+            stocks_count="0",  # crypto-only
+            commodities_count="0"  # crypto-only
         )
+
+        # დამატებითი ინფო
         welcome_msg += "\n\n📖 **ახალი ხართ?** გამოიყენეთ /guide სიგნალების განმარტებისთვის."
+
         await update.message.reply_text(welcome_msg, parse_mode='Markdown')
 
     async def cmd_guide(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """✅ დეტალური გზამკვლევი"""
         guide_text = (
             "📖 **AI ვაჭრობის გზამკვლევი**\n\n"
-            "🔹 **RSI (სიჩქარე):** <30 = იაფია (ყიდვა), >70 = ძვირია.\n"
-            "🔹 **EMA 200:** თუ ფასი ხაზს ზემოთაა - ტრენდი ზრდადია.\n"
-            "🔹 **BB Low:** ქვედა ზოლთან შეხება - პოტენციური ასხლეტა.\n"
-            "🔹 **Stop-Loss:** ყოველთვის დააყენეთ რისკის დასაზღვევად!"
+            "**🔹 RSI (Relative Strength Index)**\n"
+            "• <30 = გადაყიდულია (ყიდვის სიგნალი 📉)\n"
+            "• 30-70 = ნორმალური ზონა\n"
+            "• >70 = გადახურებულია (გაყიდვის სიგნალი 📈)\n\n"
+
+            "**🔹 EMA 200 (Exponential Moving Average)**\n"
+            "• ფასი > EMA200 = აღმავალი ტრენდი 📈\n"
+            "• ფასი < EMA200 = დაღმავალი ტრენდი 📉\n"
+            "• გრძელვადიანი ტრენდის მაჩვენებელი\n\n"
+
+            "**🔹 Bollinger Bands (BB)**\n"
+            "• BB Low-თან შეხება = შესაძლო ასხლეტა 🎯\n"
+            "• BB High-თან შეხება = შესაძლო დაცემა ⚠️\n"
+            "• ვოლატილობის საზომი\n\n"
+
+            "**🔹 Stop-Loss & Take-Profit**\n"
+            "• Stop-Loss: ავტომატური გაყიდვა ზარალის შეზღუდვისთვის 🔴\n"
+            "• Take-Profit: მოგების ფიქსირება მიზნის მიღწევისას 🟢\n"
+            "• **ყოველთვის** დააყენეთ რისკის მართვისთვის!\n\n"
+
+            "**🎯 AI Score განმარტება:**\n"
+            "• 0-30: სუსტი სიგნალი ❌\n"
+            "• 30-45: საშუალო სიგნალი ⚠️\n"
+            "• 45-65: კარგი სიგნალი ✅\n"
+            "• 65+: ძლიერი სიგნალი 🔥\n\n"
+
+            "💡 **რჩევა:** არ შევიდეთ ტრეიდში მხოლოდ AI Score-ის მიხედვით. "
+            "ყოველთვის გაითვალისწინეთ ბაზრის ზოგადი მდგომარეობა!"
         )
         await update.message.reply_text(guide_text, parse_mode='Markdown')
 
     async def cmd_tiers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # კატეგორიების ჩვენება (config-დან წამოღებული)
-        from config import TIER_1_BLUE_CHIPS, TIER_2_HIGH_GROWTH, TIER_3_MEME_COINS
-        tiers_msg = (
-            "📊 **კრიპტო კატეგორიები:**\n\n"
-            f"🔵 **Tier 1 (სტაბილური):** {', '.join([c.split('/')[0] for c in TIER_1_BLUE_CHIPS[:5]])}...\n"
-            f"🟢 **Tier 2 (ზრდადი):** {', '.join([c.split('/')[0] for c in TIER_2_HIGH_GROWTH[:5]])}...\n"
-            f"🟡 **Tier 3 (მემეები):** {', '.join([c.split('/')[0] for c in TIER_3_MEME_COINS[:5]])}..."
-        )
-        await update.message.reply_text(tiers_msg, parse_mode='Markdown')
+        """✅ FIXED: გამოიყენებს TIER_DESCRIPTIONS config-დან"""
+
+        # ✅ უბრალოდ გამოაქვს უკვე დაფორმატებული TIER_DESCRIPTIONS
+        # (TIER_DESCRIPTIONS config.py-ში უკვე .format()-ით არის შევსებული)
+        await update.message.reply_text(TIER_DESCRIPTIONS, parse_mode='Markdown')
 
     async def cmd_mystatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """✅ მომხმარებლის სტატუსი"""
         user_id = update.effective_user.id
         if self.is_active_subscriber(user_id):
             expires = self.subscriptions[user_id]['expires_at']
-            status_msg = f"✅ **სტატუსი: აქტიური**\n📅 იწურება: `{expires}`"
+            activated = self.subscriptions[user_id].get('activated_at', 'N/A')
+
+            # დარჩენილი დღების გამოთვლა
+            from datetime import datetime
+            expires_date = datetime.strptime(expires, '%Y-%m-%d').date()
+            today = datetime.now().date()
+            days_left = (expires_date - today).days
+
+            status_msg = (
+                f"✅ **სტატუსი: აქტიური Premium**\n\n"
+                f"📅 გააქტიურდა: `{activated}`\n"
+                f"📅 იწურება: `{expires}`\n"
+                f"⏳ დარჩენილია: **{days_left} დღე**\n\n"
+                f"📊 სიგნალები: ჩართულია ✅\n"
+                f"🔔 შეტყობინებები: აქტიური"
+            )
         else:
-            status_msg = "⚠️ არ გაქვთ აქტიური პაკეტი. /subscribe"
+            status_msg = (
+                "⚠️ **არ გაქვთ აქტიური პაკეტი**\n\n"
+                "💰 ფასი: 150₾ / თვე\n\n"
+                "📌 გამოწერისთვის: /subscribe"
+            )
         await update.message.reply_text(status_msg, parse_mode='Markdown')
+
+    async def cmd_subscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """✅ FIXED: გამოიყენებს PAYMENT_INSTRUCTIONS config-დან"""
+        await update.message.reply_text(PAYMENT_INSTRUCTIONS, parse_mode='Markdown')
 
     # ========================
     # ადმინისტრატორის ფუნქციები
     # ========================
     async def cmd_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id != ADMIN_ID: 
+            await update.message.reply_text("❌ არ ხართ ავტორიზებული.")
+            return
+
+        msg = (
+            "👑 **ადმინ პანელი**\n\n"
+            "**მომხმარებლის მართვა:**\n"
+            "/adduser [user_id] [days] - პრემიუმის მინიჭება\n"
+            "/removeuser [user_id] - პრემიუმის გაუქმება\n"
+            "/listusers - ყველა მომხმარებელი\n\n"
+            "**სტატისტიკა:**\n"
+            "/botstats - ბოტის სტატისტიკა\n"
+            "/signals - სიგნალების სტატისტიკა"
+        )
+        await update.message.reply_text(msg, parse_mode='Markdown')
+
+    async def cmd_adduser(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """ადმინი: მომხმარებლის დამატება"""
         if update.effective_user.id != ADMIN_ID: return
-        msg = "👑 **ადმინ პანელი**\n\n/adduser [ID] [days]\n/listusers\n/botstats"
+
+        try:
+            user_id = int(context.args[0])
+            days = int(context.args[1]) if len(context.args) > 1 else 30
+
+            self.add_subscription(user_id, days)
+            await update.message.reply_text(
+                f"✅ მომხმარებელს `{user_id}` დაემატა {days} დღე.",
+                parse_mode='Markdown'
+            )
+
+            # შეტყობინება მომხმარებელს
+            try:
+                await self.bot.send_message(
+                    user_id, 
+                    f"🎉 თქვენი Premium აქტივირებულია {days} დღით!\n\n"
+                    "📊 AI სიგნალები ჩართულია. წარმატებებს! 🚀"
+                )
+            except:
+                pass
+
+        except (IndexError, ValueError):
+            await update.message.reply_text("❌ გამოყენება: /adduser [user_id] [days]")
+
+    async def cmd_listusers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """ადმინი: მომხმარებლების სია"""
+        if update.effective_user.id != ADMIN_ID: return
+
+        active = self.get_active_subscribers()
+        inactive = [uid for uid in self.subscriptions.keys() if uid not in active]
+
+        msg = (
+            f"👥 **მომხმარებლების სია**\n\n"
+            f"✅ აქტიური: {len(active)}\n"
+            f"❌ არააქტიური: {len(inactive)}\n"
+            f"📊 სულ: {len(self.subscriptions)}\n\n"
+        )
+
+        if active:
+            msg += "**აქტიური მომხმარებლები:**\n"
+            for uid in active[:10]:  # First 10
+                expires = self.subscriptions[uid]['expires_at']
+                msg += f"• `{uid}` - {expires}\n"
+
         await update.message.reply_text(msg, parse_mode='Markdown')
 
     async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """✅ FIXED: გაფართოებული სტატისტიკა"""
         if update.effective_user.id != ADMIN_ID: return
+
         stats = getattr(self.trading_engine, 'stats', {})
+
+        # Tier-ების სტატისტიკა
+        tier_stats = stats.get('signals_by_tier', {})
+        tier_text = "\n".join([
+            f"• {tier}: {count}" 
+            for tier, count in tier_stats.items() 
+            if count > 0
+        ]) or "არ არის მონაცემები"
+
         msg = (
             f"📊 **ბოტის სტატისტიკა**\n\n"
-            f"👥 მომხმარებლები: {len(self.subscriptions)}\n"
-            f"📡 სულ სიგნალები: {stats.get('total_signals', 0)}"
+            f"**მომხმარებლები:**\n"
+            f"• სულ: {len(self.subscriptions)}\n"
+            f"• აქტიური: {len(self.get_active_subscribers())}\n\n"
+            f"**სიგნალები:**\n"
+            f"• სულ გაგზავნილი: {stats.get('total_signals', 0)}\n"
+            f"• წარმატებული: {stats.get('successful_trades', 0)}\n"
+            f"• წარუმატებელი: {stats.get('failed_trades', 0)}\n\n"
+            f"**Tier-ების მიხედვით:**\n{tier_text}\n\n"
+            f"**სისტემა:**\n"
+            f"• კრიპტო: {len(CRYPTO)}\n"
+            f"• AI Threshold: {AI_ENTRY_THRESHOLD}"
         )
         await update.message.reply_text(msg, parse_mode='Markdown')
 
@@ -173,7 +305,10 @@ class TelegramHandler:
         }
         self.save_json(self.payment_requests, self.payment_requests_file)
 
-        await update.message.reply_text("📸 ფოტო მიღებულია! ადმინისტრატორი განიხილავს უმოკლეს დროში.")
+        await update.message.reply_text(
+            "📸 ფოტო მიღებულია! ადმინისტრატორი განიხილავს უმოკლეს დროში.\n\n"
+            "⏳ დაელოდეთ დადასტურებას (ჩვეულებრივ 1-24 საათში)."
+        )
 
         # ადმინთან გაგზავნა დასადასტურებლად
         keyboard = [[
@@ -183,24 +318,43 @@ class TelegramHandler:
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo_id,
-            caption=f"🔄 გადახდის მოთხოვნა: @{username} ({user_id})",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            caption=f"🔄 **გადახდის მოთხოვნა**\n\n👤 @{username} (`{user_id}`)",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
         )
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
-        if update.effective_user.id != ADMIN_ID: return
+        if update.effective_user.id != ADMIN_ID: 
+            await query.answer("❌ არ ხართ ავტორიზებული.")
+            return
 
         action, target_id = query.data.split("_")
         target_id = int(target_id)
 
         if action == "approve":
             self.add_subscription(target_id)
-            await query.edit_message_caption(caption=f"✅ დადასტურებულია: {target_id}")
-            await self.bot.send_message(target_id, "🎉 გადახდა დადასტურდა! სიგნალები ჩართულია.")
+            await query.edit_message_caption(
+                caption=f"✅ **დადასტურებულია**\n\nUser ID: `{target_id}`",
+                parse_mode='Markdown'
+            )
+            await self.bot.send_message(
+                target_id, 
+                "🎉 **გადახდა დადასტურდა!**\n\n"
+                "✅ Premium აქტივირებულია 30 დღით.\n"
+                "📊 AI სიგნალები ჩართულია.\n\n"
+                "📖 დახმარებისთვის: /guide"
+            )
         else:
-            await query.edit_message_caption(caption=f"❌ უარყოფილია: {target_id}")
-            await self.bot.send_message(target_id, "❌ გადახდა უარყოფილია. ხარვეზის შემთხვევაში მოგვწერეთ.")
+            await query.edit_message_caption(
+                caption=f"❌ **უარყოფილია**\n\nUser ID: `{target_id}`",
+                parse_mode='Markdown'
+            )
+            await self.bot.send_message(
+                target_id, 
+                "❌ გადახდა უარყოფილია.\n\n"
+                "ხარვეზის შემთხვევაში დაგვიკავშირდით: https://t.me/Kagurashinakami"
+            )
 
         await query.answer()
 
@@ -208,34 +362,59 @@ class TelegramHandler:
     # სიგნალების დაგზავნა (Broadcasting)
     # ========================
     async def broadcast_signal(self, message, asset):
+        """✅ FIXED: იყენებს GUIDE_FOOTER-ს config-დან"""
         import time
         now = time.time()
+
         # Cooldown დაცვა (config-დან)
         if now - self.last_notifications.get(asset, 0) < NOTIFICATION_COOLDOWN:
+            logger.debug(f"⏸️ Cooldown active for {asset}")
             return
 
         self.last_notifications[asset] = now
-        full_message = message + "\n\n" + GUIDE_FOOTER
+
+        # ✅ დაემატება GUIDE_FOOTER config-დან
+        full_message = message + GUIDE_FOOTER
 
         active_users = self.get_active_subscribers()
+        logger.info(f"📤 Broadcasting signal to {len(active_users)} users: {asset}")
+
+        success_count = 0
+        fail_count = 0
+
         for user_id in active_users:
             try:
-                await self.bot.send_message(chat_id=user_id, text=full_message, parse_mode='Markdown')
-                await asyncio.sleep(0.05) # Flood protection
+                await self.bot.send_message(
+                    chat_id=user_id, 
+                    text=full_message, 
+                    parse_mode='Markdown'
+                )
+                success_count += 1
+                await asyncio.sleep(0.05)  # Flood protection
             except Exception as e:
+                fail_count += 1
                 logger.debug(f"შეცდომა გაგზავნისას {user_id}: {e}")
+
+        logger.info(f"✅ Broadcast complete: {success_count} OK, {fail_count} FAIL")
 
     # ========================
     # LIFECYCLE მენეჯმენტი
     # ========================
     def setup_handlers(self):
+        """✅ ყველა ბრძანების რეგისტრაცია"""
         self.application.add_handler(CommandHandler("start", self.cmd_start))
         self.application.add_handler(CommandHandler("guide", self.cmd_guide))
         self.application.add_handler(CommandHandler("tiers", self.cmd_tiers))
         self.application.add_handler(CommandHandler("mystatus", self.cmd_mystatus))
-        self.application.add_handler(CommandHandler("subscribe", lambda u, c: u.message.reply_text(PAYMENT_INSTRUCTIONS)))
+        self.application.add_handler(CommandHandler("subscribe", self.cmd_subscribe))
+
+        # Admin commands
         self.application.add_handler(CommandHandler("admin", self.cmd_admin))
+        self.application.add_handler(CommandHandler("adduser", self.cmd_adduser))
+        self.application.add_handler(CommandHandler("listusers", self.cmd_listusers))
         self.application.add_handler(CommandHandler("botstats", self.cmd_botstats))
+
+        # Payment handling
         self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_payment_photo))
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
 
