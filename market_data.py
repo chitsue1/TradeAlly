@@ -1,8 +1,10 @@
 """
-Market Data Provider - FINAL PRODUCTION VERSION
-✅ Sources: CoinGecko (crypto) + Binance (crypto) + Yahoo Finance (stocks)
-✅ Fixed: pandas.np deprecated issue
-✅ Added: New crypto assets (SOL, SEEKER, etc.)
+Market Data Provider - PRODUCTION VERSION v2.0
+✅ Integrated with existing Trading Engine
+✅ Sources: CoinGecko → Binance → Yahoo Finance
+✅ Circuit Breaker + Exponential Backoff
+✅ Singleton Pattern
+✅ Compatible with config.py settings
 """
 
 import asyncio
@@ -10,8 +12,9 @@ import aiohttp
 import time
 import logging
 import numpy as np
-from typing import Optional
-from dataclasses import dataclass
+from typing import Optional, Dict, Any
+from dataclasses import dataclass, asdict
+from enum import Enum
 import pandas as pd
 from ta.trend import EMAIndicator
 from ta.momentum import RSIIndicator
@@ -19,8 +22,19 @@ from ta.volatility import BollingerBands
 
 logger = logging.getLogger(__name__)
 
+# ═══════════════════════════════════════════════════════════════════
+# DATA MODELS
+# ═══════════════════════════════════════════════════════════════════
+
+class SourceStatus(Enum):
+    """API Source health status"""
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    CIRCUIT_OPEN = "circuit_open"
+
 @dataclass
 class MarketData:
+    """Market data with indicators"""
     symbol: str
     price: float
     rsi: float
@@ -30,25 +44,80 @@ class MarketData:
     source: str
     timestamp: float
 
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+@dataclass
+class CircuitBreakerState:
+    """Circuit breaker state for each API source"""
+    failures: int = 0
+    last_failure_time: float = 0
+    status: SourceStatus = SourceStatus.HEALTHY
+    consecutive_failures: int = 0
+
+# ═══════════════════════════════════════════════════════════════════
+# SINGLETON DATA PROVIDER WITH CIRCUIT BREAKER
+# ═══════════════════════════════════════════════════════════════════
+
 class MultiSourceDataProvider:
     """
-    Production-grade multi-source provider
-    - CoinGecko: crypto (free, reliable, NO API key needed)
-    - Binance: crypto (free, unlimited)
-    - Yahoo Finance: stocks + crypto fallback (free)
+    🚀 PRODUCTION-GRADE DATA PROVIDER
+
+    Features:
+    - Singleton pattern (one instance across app)
+    - Circuit breaker for each API source
+    - Exponential backoff on rate limits
+    - Intelligent fallback cascade: CoinGecko → Binance → Yahoo
+    - Professional logging
+    - Compatible with existing Trading Engine
     """
 
+    _instance = None
+    _lock = asyncio.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self, twelve_data_key: str = None, alpaca_key=None, alpaca_secret=None):
+        if self._initialized:
+            return
+
+        self._initialized = True
         self.cache = {}
         self.cache_ttl = 300  # 5 minutes
 
-        self.stats = {
-            "coingecko": {"success": 0, "fail": 0},
-            "binance": {"success": 0, "fail": 0},
-            "yahoo": {"success": 0, "fail": 0}
+        # Circuit breaker states per source
+        self.circuit_breakers = {
+            "coingecko": CircuitBreakerState(),
+            "binance": CircuitBreakerState(),
+            "yahoo": CircuitBreakerState()
         }
 
-        # ✅ CoinGecko symbol mappings (ID format)
+        # Statistics
+        self.stats = {
+            "coingecko": {"success": 0, "fail": 0, "rate_limits": 0},
+            "binance": {"success": 0, "fail": 0, "rate_limits": 0},
+            "yahoo": {"success": 0, "fail": 0, "rate_limits": 0}
+        }
+
+        # Configuration
+        self.CIRCUIT_BREAKER_THRESHOLD = 3  # Open after 3 consecutive failures
+        self.CIRCUIT_BREAKER_TIMEOUT = 300  # 5 minutes
+        self.MAX_RETRIES = 3
+        self.BASE_DELAY = 1  # Base delay for exponential backoff
+
+        # Symbol mappings
+        self._init_symbol_mappings()
+
+        logger.info("🟢 MultiSourceDataProvider initialized (Singleton)")
+
+    def _init_symbol_mappings(self):
+        """Initialize all symbol mappings"""
+
+        # CoinGecko IDs
         self.coingecko_ids = {
             "BTC/USD": "bitcoin",
             "ETH/USD": "ethereum",
@@ -66,15 +135,13 @@ class MultiSourceDataProvider:
             "NEAR/USD": "near",
             "ICP/USD": "internet-computer",
             "HBAR/USD": "hedera-hashgraph",
-            # ✅ NEW TOP CRYPTOS
-            "SEEKER/USD": "seeker",  # If exists on CoinGecko
             "MATIC/USD": "matic-network",
             "ARB/USD": "arbitrum",
             "OP/USD": "optimism",
             "SUI/USD": "sui"
         }
 
-        # Symbol mappings for Binance
+        # Binance symbols
         self.binance_symbols = {
             "BTC/USD": "BTCUSDT",
             "ETH/USD": "ETHUSDT",
@@ -92,14 +159,13 @@ class MultiSourceDataProvider:
             "NEAR/USD": "NEARUSDT",
             "ICP/USD": "ICPUSDT",
             "HBAR/USD": "HBARUSDT",
-            # ✅ NEW
             "MATIC/USD": "MATICUSDT",
             "ARB/USD": "ARBUSDT",
             "OP/USD": "OPUSDT",
             "SUI/USD": "SUIUSDT"
         }
 
-        # ✅ FIXED Yahoo symbols (verified working)
+        # Yahoo Finance symbols
         self.yahoo_symbols = {
             "BTC/USD": "BTC-USD",
             "ETH/USD": "ETH-USD",
@@ -108,16 +174,15 @@ class MultiSourceDataProvider:
             "XRP/USD": "XRP-USD",
             "ADA/USD": "ADA-USD",
             "DOGE/USD": "DOGE-USD",
-            "DOT/USD": "DOT-USD",      # ✅ Fixed: was DOT1-USD
+            "DOT/USD": "DOT-USD",
             "LINK/USD": "LINK-USD",
             "AVAX/USD": "AVAX-USD",
             "LTC/USD": "LTC-USD",
             "BCH/USD": "BCH-USD",
-            "UNI/USD": "UNI-USD",      # ✅ Simplified: UNI7083-USD also works
+            "UNI/USD": "UNI-USD",
             "NEAR/USD": "NEAR-USD",
             "ICP/USD": "ICP-USD",
             "HBAR/USD": "HBAR-USD",
-            # ✅ NEW
             "MATIC/USD": "MATIC-USD",
             "ARB/USD": "ARB-USD",
             "OP/USD": "OP-USD",
@@ -125,216 +190,322 @@ class MultiSourceDataProvider:
         }
 
     def _is_crypto(self, symbol: str) -> bool:
-        """Detect crypto"""
+        """Detect if symbol is crypto"""
         return symbol in self.coingecko_ids or "/" in symbol
 
-    def _get_coingecko_id(self, symbol: str) -> str:
-        """Convert to CoinGecko ID"""
-        return self.coingecko_ids.get(symbol)
+    # ═══════════════════════════════════════════════════════════════
+    # CIRCUIT BREAKER LOGIC
+    # ═══════════════════════════════════════════════════════════════
 
-    def _get_binance_symbol(self, symbol: str) -> str:
-        """Convert to Binance format"""
-        return self.binance_symbols.get(symbol, symbol.replace("/", ""))
+    def _is_circuit_open(self, source: str) -> bool:
+        """Check if circuit breaker is open for a source"""
+        breaker = self.circuit_breakers[source]
 
-    def _get_yahoo_symbol(self, symbol: str) -> str:
-        """Convert to Yahoo format"""
-        if symbol in self.yahoo_symbols:
-            return self.yahoo_symbols[symbol]
-        return symbol
+        if breaker.status == SourceStatus.CIRCUIT_OPEN:
+            # Check if timeout has passed
+            if time.time() - breaker.last_failure_time > self.CIRCUIT_BREAKER_TIMEOUT:
+                logger.info(f"🔄 Circuit breaker reset for {source}")
+                breaker.status = SourceStatus.HEALTHY
+                breaker.consecutive_failures = 0
+                return False
+            return True
+
+        return False
+
+    def _record_success(self, source: str):
+        """Record successful API call"""
+        breaker = self.circuit_breakers[source]
+        breaker.consecutive_failures = 0
+        breaker.status = SourceStatus.HEALTHY
+        self.stats[source]["success"] += 1
+
+    def _record_failure(self, source: str, is_rate_limit: bool = False):
+        """Record failed API call and manage circuit breaker"""
+        breaker = self.circuit_breakers[source]
+        breaker.failures += 1
+        breaker.consecutive_failures += 1
+        breaker.last_failure_time = time.time()
+
+        self.stats[source]["fail"] += 1
+        if is_rate_limit:
+            self.stats[source]["rate_limits"] += 1
+
+        # Open circuit if threshold exceeded
+        if breaker.consecutive_failures >= self.CIRCUIT_BREAKER_THRESHOLD:
+            breaker.status = SourceStatus.CIRCUIT_OPEN
+            logger.warning(
+                f"⚠️  CIRCUIT BREAKER OPEN for {source} "
+                f"({breaker.consecutive_failures} consecutive failures)"
+            )
+
+    # ═══════════════════════════════════════════════════════════════
+    # EXPONENTIAL BACKOFF
+    # ═══════════════════════════════════════════════════════════════
+
+    async def _exponential_backoff(self, attempt: int, source: str):
+        """Exponential backoff with jitter"""
+        delay = min(self.BASE_DELAY * (2 ** attempt), 60)  # Max 60s
+        jitter = np.random.uniform(0, 0.1 * delay)
+        total_delay = delay + jitter
+
+        logger.debug(f"⏳ Backoff {source}: attempt {attempt+1}, waiting {total_delay:.2f}s")
+        await asyncio.sleep(total_delay)
+
+    # ═══════════════════════════════════════════════════════════════
+    # DATA FETCHING METHODS
+    # ═══════════════════════════════════════════════════════════════
 
     async def _fetch_coingecko(self, symbol: str) -> Optional[pd.Series]:
-        """
-        ✅ NEW: Fetch from CoinGecko (free, no API key)
-        Uses market_chart endpoint for historical data
-        """
-        try:
-            coingecko_id = self._get_coingecko_id(symbol)
-            if not coingecko_id:
-                return None
+        """Fetch from CoinGecko with retry logic"""
 
-            async with aiohttp.ClientSession() as session:
-                # CoinGecko market_chart API (last 30 days, hourly)
-                url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart"
-                params = {
-                    "vs_currency": "usd",
-                    "days": "30",
-                    "interval": "hourly"
-                }
-                headers = {
-                    "User-Agent": "Mozilla/5.0"
-                }
-
-                async with session.get(url, params=params, headers=headers,
-                                      timeout=aiohttp.ClientTimeout(total=15)) as resp:
-
-                    if resp.status == 429:
-                        logger.warning(f"CoinGecko rate limited for {symbol}")
-                        await asyncio.sleep(2)
-                        return None
-
-                    if resp.status != 200:
-                        logger.debug(f"CoinGecko failed for {symbol}: {resp.status}")
-                        return None
-
-                    data = await resp.json()
-
-                    prices = data.get("prices", [])
-                    if not prices or len(prices) < 200:
-                        logger.debug(f"CoinGecko: insufficient data for {symbol} ({len(prices)} points)")
-                        return None
-
-                    # Extract close prices (prices is [[timestamp, price], ...])
-                    closes = [float(price[1]) for price in prices[-200:]]
-
-                    self.stats["coingecko"]["success"] += 1
-                    logger.debug(f"✅ CoinGecko: {symbol} → {coingecko_id}")
-                    return pd.Series(closes)
-
-        except asyncio.TimeoutError:
-            logger.debug(f"CoinGecko timeout for {symbol}")
-            self.stats["coingecko"]["fail"] += 1
+        if self._is_circuit_open("coingecko"):
+            logger.debug(f"⭕ Circuit open for CoinGecko, skipping {symbol}")
             return None
-        except Exception as e:
-            self.stats["coingecko"]["fail"] += 1
-            logger.debug(f"CoinGecko error for {symbol}: {str(e)[:100]}")
+
+        coingecko_id = self.coingecko_ids.get(symbol)
+        if not coingecko_id:
             return None
+
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart"
+                    params = {"vs_currency": "usd", "days": "30", "interval": "hourly"}
+                    headers = {"User-Agent": "Mozilla/5.0"}
+
+                    async with session.get(
+                        url, params=params, headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=15)
+                    ) as resp:
+
+                        if resp.status == 429:
+                            logger.warning(f"🚫 Rate limit: CoinGecko ({symbol})")
+                            self._record_failure("coingecko", is_rate_limit=True)
+                            await self._exponential_backoff(attempt, "coingecko")
+                            continue
+
+                        if resp.status != 200:
+                            self._record_failure("coingecko")
+                            return None
+
+                        data = await resp.json()
+                        prices = data.get("prices", [])
+
+                        if len(prices) < 200:
+                            return None
+
+                        closes = [float(price[1]) for price in prices[-200:]]
+                        self._record_success("coingecko")
+
+                        logger.debug(f"✅ CoinGecko: {symbol} (${closes[-1]:.2f})")
+                        return pd.Series(closes)
+
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️  Timeout: CoinGecko ({symbol})")
+                self._record_failure("coingecko")
+                if attempt < self.MAX_RETRIES - 1:
+                    await self._exponential_backoff(attempt, "coingecko")
+            except Exception as e:
+                logger.error(f"❌ CoinGecko error ({symbol}): {str(e)[:100]}")
+                self._record_failure("coingecko")
+                break
+
+        return None
 
     async def _fetch_binance(self, symbol: str) -> Optional[pd.Series]:
-        """Fetch from Binance"""
-        try:
-            binance_symbol = self._get_binance_symbol(symbol)
+        """Fetch from Binance with retry logic"""
 
-            async with aiohttp.ClientSession() as session:
-                url = "https://api.binance.com/api/v3/klines"
-                params = {
-                    "symbol": binance_symbol,
-                    "interval": "1h",
-                    "limit": 200
-                }
-                headers = {
-                    "User-Agent": "Mozilla/5.0"
-                }
-
-                async with session.get(url, params=params, headers=headers,
-                                      timeout=aiohttp.ClientTimeout(total=15)) as resp:
-
-                    if resp.status == 429:
-                        logger.warning(f"Binance rate limited for {symbol}")
-                        await asyncio.sleep(1)
-                        return None
-
-                    if resp.status != 200:
-                        logger.debug(f"Binance failed for {symbol}: {resp.status}")
-                        return None
-
-                    data = await resp.json()
-
-                    if not data or len(data) < 200:
-                        logger.debug(f"Binance: insufficient data for {symbol}")
-                        return None
-
-                    closes = [float(candle[4]) for candle in data]
-
-                    self.stats["binance"]["success"] += 1
-                    logger.debug(f"✅ Binance: {symbol} → {binance_symbol}")
-                    return pd.Series(closes)
-
-        except asyncio.TimeoutError:
-            logger.debug(f"Binance timeout for {symbol}")
-            self.stats["binance"]["fail"] += 1
+        if self._is_circuit_open("binance"):
+            logger.debug(f"⭕ Circuit open for Binance, skipping {symbol}")
             return None
-        except Exception as e:
-            self.stats["binance"]["fail"] += 1
-            logger.debug(f"Binance error for {symbol}: {str(e)[:100]}")
-            return None
+
+        binance_symbol = self.binance_symbols.get(symbol, symbol.replace("/", ""))
+
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    url = "https://api.binance.com/api/v3/klines"
+                    params = {"symbol": binance_symbol, "interval": "1h", "limit": 200}
+
+                    async with session.get(
+                        url, params=params,
+                        timeout=aiohttp.ClientTimeout(total=15)
+                    ) as resp:
+
+                        if resp.status == 429:
+                            logger.warning(f"🚫 Rate limit: Binance ({symbol})")
+                            self._record_failure("binance", is_rate_limit=True)
+                            await self._exponential_backoff(attempt, "binance")
+                            continue
+
+                        if resp.status != 200:
+                            self._record_failure("binance")
+                            return None
+
+                        data = await resp.json()
+
+                        if len(data) < 200:
+                            return None
+
+                        closes = [float(candle[4]) for candle in data]
+                        self._record_success("binance")
+
+                        logger.debug(f"✅ Binance: {symbol} (${closes[-1]:.2f})")
+                        return pd.Series(closes)
+
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️  Timeout: Binance ({symbol})")
+                self._record_failure("binance")
+                if attempt < self.MAX_RETRIES - 1:
+                    await self._exponential_backoff(attempt, "binance")
+            except Exception as e:
+                logger.error(f"❌ Binance error ({symbol}): {str(e)[:100]}")
+                self._record_failure("binance")
+                break
+
+        return None
 
     async def _fetch_yahoo(self, symbol: str) -> Optional[pd.Series]:
-        """Fetch from Yahoo Finance"""
+        """Fetch from Yahoo Finance with retry logic"""
+
+        if self._is_circuit_open("yahoo"):
+            logger.debug(f"⭕ Circuit open for Yahoo, skipping {symbol}")
+            return None
+
+        yahoo_symbol = self.yahoo_symbols.get(symbol, symbol)
+
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
+                    params = {"interval": "1h", "range": "1mo"}
+                    headers = {"User-Agent": "Mozilla/5.0"}
+
+                    async with session.get(
+                        url, params=params, headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=15)
+                    ) as resp:
+
+                        if resp.status == 429:
+                            logger.warning(f"🚫 Rate limit: Yahoo ({symbol})")
+                            self._record_failure("yahoo", is_rate_limit=True)
+                            await self._exponential_backoff(attempt, "yahoo")
+                            continue
+
+                        if resp.status != 200:
+                            self._record_failure("yahoo")
+                            return None
+
+                        data = await resp.json()
+                        result = data.get("chart", {}).get("result", [])
+
+                        if not result:
+                            return None
+
+                        indicators = result[0].get("indicators", {}).get("quote", [{}])[0]
+                        closes = [c for c in indicators.get("close", []) if c is not None]
+
+                        if len(closes) < 200:
+                            return None
+
+                        self._record_success("yahoo")
+
+                        logger.debug(f"✅ Yahoo: {symbol} (${closes[-1]:.2f})")
+                        return pd.Series(closes[-200:])
+
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️  Timeout: Yahoo ({symbol})")
+                self._record_failure("yahoo")
+                if attempt < self.MAX_RETRIES - 1:
+                    await self._exponential_backoff(attempt, "yahoo")
+            except Exception as e:
+                logger.error(f"❌ Yahoo error ({symbol}): {str(e)[:100]}")
+                self._record_failure("yahoo")
+                break
+
+        return None
+
+    # ═══════════════════════════════════════════════════════════════
+    # INDICATOR CALCULATION (NaN-SAFE)
+    # ═══════════════════════════════════════════════════════════════
+
+    def _calculate_indicators(
+        self, 
+        close_series: pd.Series, 
+        symbol: str
+    ) -> Optional[Dict[str, float]]:
+        """Calculate technical indicators with NaN safety"""
         try:
-            yahoo_symbol = self._get_yahoo_symbol(symbol)
+            # RSI
+            rsi_indicator = RSIIndicator(close_series, window=14)
+            rsi_value = rsi_indicator.rsi().iloc[-1]
 
-            async with aiohttp.ClientSession() as session:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
-                params = {
-                    "interval": "1h",
-                    "range": "1mo"
-                }
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
+            # Check for NaN/Inf
+            if pd.isna(rsi_value) or not np.isfinite(rsi_value):
+                logger.warning(f"⚠️  Invalid RSI for {symbol}")
+                return None
 
-                async with session.get(url, params=params, headers=headers,
-                                      timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            # EMA 200
+            ema_indicator = EMAIndicator(close_series, window=200)
+            ema_value = ema_indicator.ema_indicator().iloc[-1]
 
-                    if resp.status == 429:
-                        logger.warning(f"Yahoo rate limited for {symbol}")
-                        await asyncio.sleep(2)
-                        return None
+            if pd.isna(ema_value) or not np.isfinite(ema_value):
+                logger.warning(f"⚠️  Invalid EMA for {symbol}")
+                return None
 
-                    if resp.status != 200:
-                        logger.debug(f"Yahoo failed for {symbol}: {resp.status}")
-                        return None
+            # Bollinger Bands
+            bb = BollingerBands(close_series)
+            bb_low = bb.bollinger_lband().iloc[-1]
+            bb_high = bb.bollinger_hband().iloc[-1]
 
-                    data = await resp.json()
+            if pd.isna(bb_low) or pd.isna(bb_high):
+                logger.warning(f"⚠️  Invalid Bollinger Bands for {symbol}")
+                return None
 
-                    chart = data.get("chart", {})
-                    result = chart.get("result", [])
+            return {
+                "price": float(close_series.iloc[-1]),
+                "rsi": float(rsi_value),
+                "ema200": float(ema_value),
+                "bb_low": float(bb_low),
+                "bb_high": float(bb_high)
+            }
 
-                    if not result:
-                        error = chart.get("error")
-                        if error:
-                            logger.debug(f"Yahoo error for {symbol}: {error.get('description')}")
-                        return None
-
-                    indicators = result[0].get("indicators", {}).get("quote", [{}])[0]
-                    closes = indicators.get("close", [])
-
-                    closes = [c for c in closes if c is not None]
-
-                    if len(closes) < 200:
-                        logger.debug(f"Yahoo: insufficient data for {symbol} ({len(closes)} candles)")
-                        return None
-
-                    self.stats["yahoo"]["success"] += 1
-                    logger.debug(f"✅ Yahoo: {symbol} → {yahoo_symbol}")
-                    return pd.Series(closes[-200:])
-
-        except asyncio.TimeoutError:
-            logger.debug(f"Yahoo timeout for {symbol}")
-            self.stats["yahoo"]["fail"] += 1
-            return None
         except Exception as e:
-            self.stats["yahoo"]["fail"] += 1
-            logger.debug(f"Yahoo error for {symbol}: {str(e)[:100]}")
+            logger.error(f"❌ Indicator calculation failed for {symbol}: {e}")
             return None
+
+    # ═══════════════════════════════════════════════════════════════
+    # MAIN FETCH METHOD (Compatible with Trading Engine)
+    # ═══════════════════════════════════════════════════════════════
 
     async def fetch_with_fallback(self, symbol: str) -> Optional[MarketData]:
         """
-        ✅ UPDATED: Intelligent fallback with CoinGecko priority
+        🎯 INTELLIGENT FALLBACK CASCADE
+
         Crypto: CoinGecko → Binance → Yahoo
         Stocks: Yahoo only
+
+        Returns MarketData or None
         """
 
-        # Check cache first
+        # Check cache
         if symbol in self.cache:
             cached_data, cached_time = self.cache[symbol]
             if time.time() - cached_time < self.cache_ttl:
                 logger.debug(f"💾 Cache hit: {symbol}")
                 return cached_data
 
+        # Determine source priority
         is_crypto = self._is_crypto(symbol)
 
-        # Define source priority
         if is_crypto:
             sources = [
-                ("coingecko", self._fetch_coingecko),  # ✅ NEW: Priority #1
+                ("coingecko", self._fetch_coingecko),
                 ("binance", self._fetch_binance),
                 ("yahoo", self._fetch_yahoo)
             ]
         else:
-            sources = [
-                ("yahoo", self._fetch_yahoo)
-            ]
+            sources = [("yahoo", self._fetch_yahoo)]
 
         # Try each source
         for source_name, fetch_func in sources:
@@ -343,71 +514,63 @@ class MultiSourceDataProvider:
             close_series = await fetch_func(symbol)
 
             if close_series is not None and len(close_series) >= 200:
-                try:
-                    # Calculate indicators
-                    rsi_indicator = RSIIndicator(close_series, window=14)
-                    rsi_value = rsi_indicator.rsi().iloc[-1]
+                indicators = self._calculate_indicators(close_series, symbol)
 
-                    # ✅ FIXED: numpy instead of pandas.np
-                    if pd.isna(rsi_value) or not np.isfinite(rsi_value):
-                        logger.debug(f"Invalid RSI for {symbol}")
-                        continue
-
-                    ema_indicator = EMAIndicator(close_series, window=200)
-                    ema_value = ema_indicator.ema_indicator().iloc[-1]
-
-                    bb = BollingerBands(close_series)
-                    bb_low = bb.bollinger_lband().iloc[-1]
-                    bb_high = bb.bollinger_hband().iloc[-1]
-
+                if indicators:
                     market_data = MarketData(
                         symbol=symbol,
-                        price=float(close_series.iloc[-1]),
-                        rsi=float(rsi_value),
-                        ema200=float(ema_value),
-                        bb_low=float(bb_low),
-                        bb_high=float(bb_high),
+                        price=indicators["price"],
+                        rsi=indicators["rsi"],
+                        ema200=indicators["ema200"],
+                        bb_low=indicators["bb_low"],
+                        bb_high=indicators["bb_high"],
                         source=source_name,
                         timestamp=time.time()
                     )
 
-                    # Cache successful result
+                    # Cache result
                     self.cache[symbol] = (market_data, time.time())
 
-                    logger.info(f"✅ {symbol}: ${market_data.price:.2f} (RSI: {market_data.rsi:.1f}) [source: {source_name}]")
+                    logger.info(
+                        f"✅ {symbol}: ${market_data.price:.2f} | "
+                        f"RSI: {market_data.rsi:.1f} | "
+                        f"[{source_name.upper()}]"
+                    )
                     return market_data
-
-                except Exception as e:
-                    logger.error(f"Indicator calculation failed for {symbol}: {e}")
-                    continue
 
         # All sources failed
         logger.error(f"❌ All sources failed for {symbol}")
         return None
 
-    def get_stats(self):
-        """Get statistics"""
-        total_cg = self.stats["coingecko"]["success"] + self.stats["coingecko"]["fail"]
-        total_binance = self.stats["binance"]["success"] + self.stats["binance"]["fail"]
-        total_yahoo = self.stats["yahoo"]["success"] + self.stats["yahoo"]["fail"]
+    # ═══════════════════════════════════════════════════════════════
+    # STATISTICS (for Trading Engine compatibility)
+    # ═══════════════════════════════════════════════════════════════
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get detailed statistics"""
+
+        stats_data = {}
+
+        for source in ["coingecko", "binance", "yahoo"]:
+            total = self.stats[source]["success"] + self.stats[source]["fail"]
+            success_rate = (self.stats[source]["success"] / max(1, total)) * 100
+
+            breaker = self.circuit_breakers[source]
+
+            stats_data[source] = {
+                "success": self.stats[source]["success"],
+                "fail": self.stats[source]["fail"],
+                "rate_limits": self.stats[source]["rate_limits"],
+                "success_rate": f"{success_rate:.1f}%",
+                "circuit_status": breaker.status.value,
+                "consecutive_failures": breaker.consecutive_failures
+            }
 
         return {
-            "sources": {
-                "coingecko": {
-                    "success": self.stats["coingecko"]["success"],
-                    "fail": self.stats["coingecko"]["fail"],
-                    "rate": (self.stats["coingecko"]["success"] / max(1, total_cg)) * 100
-                },
-                "binance": {
-                    "success": self.stats["binance"]["success"],
-                    "fail": self.stats["binance"]["fail"],
-                    "rate": (self.stats["binance"]["success"] / max(1, total_binance)) * 100
-                },
-                "yahoo": {
-                    "success": self.stats["yahoo"]["success"],
-                    "fail": self.stats["yahoo"]["fail"],
-                    "rate": (self.stats["yahoo"]["success"] / max(1, total_yahoo)) * 100
-                }
-            },
-            "cache_size": len(self.cache)
+            "sources": stats_data,
+            "cache_size": len(self.cache),
+            "total_requests": sum(
+                s["success"] + s["fail"] 
+                for s in self.stats.values()
+            )
         }

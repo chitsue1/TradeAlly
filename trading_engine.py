@@ -1,6 +1,8 @@
 """
-AI Trading Bot - Trading Engine (Debug Version)
-ამ ვერსიაში დამატებულია verbose logging პრობლემის გამოსავლენად
+AI Trading Bot - Trading Engine (Production v2.0)
+✅ Integrated with MultiSourceDataProvider
+✅ Circuit Breaker aware
+✅ Enhanced logging
 """
 
 import asyncio
@@ -16,7 +18,7 @@ except ImportError:
 
 from config import *
 
-# ✅ TEMPORARY: Import check
+# ✅ Import multi-source provider
 try:
     from market_data import MultiSourceDataProvider
     MULTI_SOURCE_AVAILABLE = True
@@ -60,8 +62,8 @@ class TradingEngine:
             try:
                 self.data_provider = MultiSourceDataProvider(
                     twelve_data_key=TWELVE_DATA_API_KEY,
-                    alpaca_key=getattr(self, 'ALPACA_API_KEY', None),
-                    alpaca_secret=getattr(self, 'ALPACA_SECRET_KEY', None)
+                    alpaca_key=ALPACA_API_KEY,
+                    alpaca_secret=ALPACA_SECRET_KEY
                 )
                 self.use_multi_source = True
                 logger.info("✅ Multi-source data provider initialized")
@@ -78,6 +80,13 @@ class TradingEngine:
         self.active_positions = {}
         self.last_scan_time = 0
 
+        # ✅ Stats tracking
+        self.stats = {
+            'total_signals': 0,
+            'successful_trades': 0,
+            'failed_trades': 0
+        }
+
         logger.info("✅ TradingEngine initialized")
 
     def load_trading_knowledge(self):
@@ -91,7 +100,10 @@ class TradingEngine:
         return {"patterns": [], "strategies": []}
 
     async def fetch_data_multi_source(self, symbol):
-        """Multi-source fetch (new method)"""
+        """
+        ✅ Multi-source fetch using new provider
+        Returns dict compatible with existing logic
+        """
         try:
             logger.debug(f"🔍 Fetching {symbol} via multi-source...")
             market_data = await self.data_provider.fetch_with_fallback(symbol)
@@ -100,8 +112,13 @@ class TradingEngine:
                 logger.warning(f"⚠️ All sources failed for {symbol}")
                 return None
 
-            logger.info(f"✅ {symbol}: ${market_data.price:.2f} [source: {market_data.source}]")
+            logger.info(
+                f"✅ {symbol}: ${market_data.price:.2f} | "
+                f"RSI: {market_data.rsi:.1f} | "
+                f"[{market_data.source.upper()}]"
+            )
 
+            # Return dict format compatible with existing code
             return {
                 "price": market_data.price,
                 "rsi": market_data.rsi,
@@ -165,7 +182,7 @@ class TradingEngine:
                     ema200 = EMAIndicator(close, window=200).ema_indicator().iloc[-1]
                     bb = BollingerBands(close)
 
-                    logger.info(f"✅ {symbol}: ${close.iloc[-1]:.2f} [source: twelvedata_fallback]")
+                    logger.info(f"✅ {symbol}: ${close.iloc[-1]:.2f} [TwelveData Fallback]")
 
                     return {
                         "price": close.iloc[-1],
@@ -205,7 +222,7 @@ class TradingEngine:
         # 3. Bollinger Bands
         if data['price'] <= data['bb_low']:
             score += 25
-            reasons.append("🎯 ფასი ქვედა ბოინჯერზეა")
+            reasons.append("🎯 ფასი ქვედა ბოლინჯერზეა")
 
         # 4. ბაზრის ზოგადი განწყობა (Fear & Greed)
         if sentiment.get('fg_index', 50) < 30:
@@ -219,21 +236,63 @@ class TradingEngine:
 
         return score, reasons
 
+    async def send_buy_signal(self, symbol, data, ai_score, reasons):
+        """
+        ✅ Send buy signal to Telegram
+        Compatible with existing telegram_handler
+        """
+        if not hasattr(self, 'telegram_handler') or self.telegram_handler is None:
+            logger.warning("⚠️ Telegram handler not linked, skipping notification")
+            return
+
+        # Determine asset type
+        if symbol in CRYPTO:
+            asset_type = "CRYPTO"
+        elif symbol in STOCKS:
+            asset_type = "STOCK"
+        elif symbol in COMMODITIES:
+            asset_type = "COMMODITY"
+        else:
+            asset_type = "UNKNOWN"
+
+        # Format message using template from config
+        message = BUY_SIGNAL_TEMPLATE.format(
+            asset=symbol,
+            asset_type=asset_type,
+            price=data['price'],
+            rsi=data['rsi'],
+            ema200=data['ema200'],
+            ai_score=ai_score,
+            data_source=data.get('source', 'unknown').upper(),
+            reasons="\n".join(reasons),
+            sl_percent=STOP_LOSS_PERCENT,
+            tp_percent=TAKE_PROFIT_PERCENT,
+            estimated_tp=TAKE_PROFIT_PERCENT
+        )
+
+        # Send via Telegram
+        try:
+            await self.telegram_handler.broadcast_signal(message, symbol)
+            self.stats['total_signals'] += 1
+            logger.info(f"📤 Buy signal sent for {symbol}")
+        except Exception as e:
+            logger.error(f"❌ Failed to send signal for {symbol}: {e}")
+
     async def scan_market(self, all_assets):
         """
-        Market scan with extensive logging for debugging
+        ✅ Market scan with enhanced logging
         """
         logger.info("="*60)
-        logger.info(f"🔍 STARTING MARKET SCAN")
-        logger.info(f"📊 Assets to scan: {len(all_assets)}")
-        logger.info(f"⏱️ Scan interval: {SCAN_INTERVAL}s ({SCAN_INTERVAL/60:.1f} min)")
-        logger.info(f"⏳ Delay per asset: {ASSET_DELAY}s")
-        logger.info(f"🔌 Mode: {'Multi-source' if self.use_multi_source else 'TwelveData fallback'}")
+        logger.info(f"🔍 MARKET SCAN STARTED")
+        logger.info(f"📊 Assets: {len(all_assets)}")
+        logger.info(f"⏱️ Cycle: {SCAN_INTERVAL/60:.1f} min | Delay: {ASSET_DELAY}s")
+        logger.info(f"🔌 Mode: {'Multi-Source' if self.use_multi_source else 'TwelveData'}")
         logger.info("="*60)
 
         scan_start = time.time()
         success_count = 0
         fail_count = 0
+        signals_found = 0
 
         for i, symbol in enumerate(all_assets, 1):
             try:
@@ -247,35 +306,50 @@ class TradingEngine:
                     logger.warning(f"⚠️ [{i}/{len(all_assets)}] Failed: {symbol}")
                 else:
                     success_count += 1
-                    logger.info(f"✅ [{i}/{len(all_assets)}] Success: {symbol} - ${data['price']:.2f} (RSI: {data['rsi']:.1f})")
+
+                    # ✅ AI Analysis
+                    sentiment = {"fg_index": 32}  # Mock sentiment
+                    ai_score, reasons = await self.ai_analyze_signal(symbol, data, sentiment)
+
+                    # ✅ Signal detection
+                    if ai_score >= AI_ENTRY_THRESHOLD:
+                        signals_found += 1
+                        logger.info(f"🎯 SIGNAL DETECTED: {symbol} (Score: {ai_score})")
+                        await self.send_buy_signal(symbol, data, ai_score, reasons)
 
                 # Delay before next asset
-                logger.debug(f"⏳ Waiting {ASSET_DELAY}s before next asset...")
                 await asyncio.sleep(ASSET_DELAY)
 
             except Exception as e:
                 fail_count += 1
-                logger.error(f"❌ [{i}/{len(all_assets)}] Error scanning {symbol}: {e}")
+                logger.error(f"❌ [{i}/{len(all_assets)}] Error: {symbol}: {e}")
 
-        # Summary
+        # ✅ Summary with provider stats
         scan_duration = time.time() - scan_start
         success_rate = (success_count / len(all_assets)) * 100 if len(all_assets) > 0 else 0
 
         logger.info("="*60)
-        logger.info(f"✅ SCAN CYCLE COMPLETE")
-        logger.info(f"⏱️ Duration: {scan_duration/60:.1f} minutes")
+        logger.info(f"✅ SCAN COMPLETE")
+        logger.info(f"⏱️ Duration: {scan_duration/60:.1f} min")
         logger.info(f"📊 Success: {success_count}/{len(all_assets)} ({success_rate:.1f}%)")
-        logger.info(f"❌ Failed: {fail_count}/{len(all_assets)}")
+        logger.info(f"❌ Failed: {fail_count}")
+        logger.info(f"🎯 Signals: {signals_found}")
 
+        # ✅ Provider statistics
         if self.use_multi_source:
             try:
                 stats = self.data_provider.get_stats()
                 logger.info(f"📈 Provider Statistics:")
                 for source, data in stats['sources'].items():
-                    logger.info(f"   {source:12s}: {data['success']:3d} OK, {data['fail']:3d} FAIL")
-                logger.info(f"   Cache size: {stats['cache_size']}")
-            except:
-                pass
+                    logger.info(
+                        f"   {source:12s}: "
+                        f"{data['success']:3d} OK | "
+                        f"{data['fail']:3d} FAIL | "
+                        f"Circuit: {data['circuit_status']}"
+                    )
+                logger.info(f"   Cache: {stats['cache_size']} items")
+            except Exception as e:
+                logger.error(f"❌ Stats error: {e}")
 
         logger.info("="*60)
 
@@ -289,9 +363,10 @@ class TradingEngine:
 ╔════════════════════════════════════════╗
 ║    TRADING ENGINE STARTED              ║
 ╠════════════════════════════════════════╣
-║ Mode: {'Multi-Source' if self.use_multi_source else 'Fallback (TwelveData)'}
+║ Mode: {'Multi-Source ✅' if self.use_multi_source else 'Fallback ⚠️'}
 ║ Assets: {len(all_assets)}
 ║ Scan Cycle: {SCAN_INTERVAL/60:.0f} minutes
+║ AI Threshold: {AI_ENTRY_THRESHOLD}
 ╚════════════════════════════════════════╝
         """)
 
@@ -300,7 +375,7 @@ class TradingEngine:
 
         while True:
             try:
-                logger.info(f"🚀 Starting scan cycle {consecutive_failures + 1}...")
+                logger.info(f"🚀 Starting scan cycle...")
 
                 # Mock sentiment (replace with real API later)
                 sentiment = {"fg_index": 32}

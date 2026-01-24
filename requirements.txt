@@ -5,3 +5,4 @@ ta==0.11.0
 PyPDF2==3.0.1
 feedparser==6.0.11
 twelvedata>=1.2.10
+numpy>=1.24.0
