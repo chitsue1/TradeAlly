@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 from config import *
-from trading_engine import TradingEngine
+from trading_engine_v3 import TradingEngine
 from telegram_handler import TelegramHandler
 
 # ========================
