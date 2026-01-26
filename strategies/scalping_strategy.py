@@ -7,6 +7,5 @@ class ScalpingStrategy(BaseStrategy):
     def __init__(self, config):
         super().__init__("Scalping", config)
 
-    async def analyze(self, symbol, data, sentiment, regime):
-        # Implementation for scalping
-        return 0, []
+    async def analyze(self, symbol, price, regime_analysis, technical_data, tier, existing_position):
+        return None

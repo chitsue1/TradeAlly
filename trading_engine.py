@@ -93,9 +93,9 @@ class TradingEngine:
         self.regime_detector = MarketRegimeDetector()
 
         self.strategies = [
-            LongTermStrategy(),
-            ScalpingStrategy(),
-            OpportunisticStrategy()
+            LongTermStrategy({}),
+            ScalpingStrategy({}),
+            OpportunisticStrategy({})
         ]
 
         logger.info(f"✅ {len(self.strategies)} strategies loaded")
@@ -354,7 +354,7 @@ class TradingEngine:
                 }
 
                 for strategy in self.strategies:
-                    signal = strategy.analyze(
+                    signal = await strategy.analyze(
                         symbol=symbol,
                         price=data['price'],
                         regime_analysis=regime_analysis,
