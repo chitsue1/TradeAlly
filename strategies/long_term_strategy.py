@@ -6,12 +6,16 @@ Long-Term Investment Strategy
 """
 
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Any
 from datetime import datetime
 
+# მნიშვნელოვანია: base_strategy-ში უნდა გქონდეს ყველა ეს Enum
 from .base_strategy import (
-    BaseStrategy, TradingSignal, StrategyType, 
-    ConfidenceLevel, ActionType
+    BaseStrategy, 
+    TradingSignal, 
+    StrategyType, 
+    ConfidenceLevel, 
+    ActionType
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +34,7 @@ class LongTermStrategy(BaseStrategy):
     """
 
     def __init__(self):
+        # BaseStrategy-ს გადაეცემა სახელი და ტიპი
         super().__init__(
             name="LongTermInvestment",
             strategy_type=StrategyType.LONG_TERM
@@ -43,7 +48,7 @@ class LongTermStrategy(BaseStrategy):
         self,
         symbol: str,
         price: float,
-        regime_analysis,
+        regime_analysis: Any,
         technical_data: Dict,
         tier: str,
         existing_position: Optional[object] = None
@@ -57,10 +62,11 @@ class LongTermStrategy(BaseStrategy):
         # ════════════════════════════════════════════════════════
 
         # არის თუ არა ღია პოზიცია?
-        if existing_position and existing_position.buy_signals_sent >= 1:
-            # გრძელვადიანი → მხოლოდ 1 შესვლა
-            logger.debug(f"[LONG_TERM] {symbol} უკვე აქვს პოზიცია")
-            return None
+        if existing_position and hasattr(existing_position, 'buy_signals_sent'):
+            if existing_position.buy_signals_sent >= 1:
+                # გრძელვადიანი → მხოლოდ 1 შესვლა
+                logger.debug(f"[LONG_TERM] {symbol} უკვე აქვს პოზიცია")
+                return None
 
         # Cooldown check
         if not self._check_cooldown(symbol):
@@ -82,12 +88,12 @@ class LongTermStrategy(BaseStrategy):
         # 3. TECHNICAL VALIDATION
         # ════════════════════════════════════════════════════════
 
-        rsi = technical_data['rsi']
-        ema200 = technical_data['ema200']
-        bb_low = technical_data['bb_low']
+        rsi = technical_data.get('rsi', 50)
+        ema200 = technical_data.get('ema200', price)
+        bb_low = technical_data.get('bb_low', price)
 
         # ძირითადი პირობები:
-        # 1. RSI < 40 (არა გადახურებული)
+        # 1. RSI < 45 (არა გადახურებული)
         # 2. ფასი EMA200-ის ზემოთ ან ახლოს (ტრენდი აღმავალია)
         # 3. ფასი ბოლინჯერის ქვედა ნახევარშია (შედარებით იაფი)
 
@@ -95,8 +101,8 @@ class LongTermStrategy(BaseStrategy):
             logger.debug(f"[LONG_TERM] {symbol} RSI ძალიან მაღალია: {rsi:.1f}")
             return None
 
-        if price < ema200 * 0.95:  # 5% ქვევით
-            logger.debug(f"[LONG_TERM] {symbol} ძალიან შორსაა EMA200-დან")
+        if price < ema200 * 0.95:  # 5% ქვევით მაქსიმუმ
+            logger.debug(f"[LONG_TERM] {symbol} ძალიან შორსაა EMA200-დან ქვევით")
             return None
 
         # ════════════════════════════════════════════════════════
@@ -126,7 +132,7 @@ class LongTermStrategy(BaseStrategy):
         if price <= bb_low * 1.05:
             technical_score += 30
 
-        # Confidence calculation
+        # Confidence calculation - იძახებს BaseStrategy-ს მეთოდს
         confidence_level, confidence_score = self._calculate_confidence(
             regime_confidence=regime_analysis.confidence,
             technical_alignment=technical_score,
@@ -177,7 +183,7 @@ class LongTermStrategy(BaseStrategy):
             risk_factors.append(warning)
 
         if not risk_factors:
-            risk_factors.append("არ არის")
+            risk_factors.append("არ არის მნიშვნელოვანი რისკი")
 
         # ════════════════════════════════════════════════════════
         # 7. RISK ASSESSMENT
@@ -224,14 +230,13 @@ class LongTermStrategy(BaseStrategy):
         """
         უნდა გაიგზავნოს სიგნალი?
         """
-
         # Confidence threshold
         if signal.confidence_score < 60:
             return False, f"confidence ძალიან დაბალია ({signal.confidence_score:.0f}%)"
 
-        # Extreme risk
+        # Extreme risk check
         if signal.risk_level == "EXTREME":
-            return False, "ექსტრემალური რისკი"
+            return False, "ექსტრემალური რისკი - სიგნალი დაბლოკილია"
 
         # Update last signal time
         self.last_signal_time[symbol] = datetime.now()
@@ -261,7 +266,6 @@ class LongTermStrategy(BaseStrategy):
 
     def _get_tier_config(self, tier: str) -> Dict:
         """Tier-ის კონფიგურაცია"""
-
         configs = {
             "BLUE_CHIP": {
                 "target_percent": 15.0,
@@ -284,17 +288,15 @@ class LongTermStrategy(BaseStrategy):
                 "hold_duration": "3-8 კვირა"
             }
         }
-
         return configs.get(tier, configs["HIGH_GROWTH"])
 
     def _build_primary_reason(
         self,
         symbol: str,
-        regime_analysis,
+        regime_analysis: Any,
         tier: str
     ) -> str:
         """მთავარი მიზეზის ფორმულირება"""
-
         reason = (
             f"{symbol} სტრუქტურულ აღმავალ ტრენდში იმყოფება "
             f"და ახლოსაა გრძელვადიან მხარდაჭერასთან. "

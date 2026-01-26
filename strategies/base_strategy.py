@@ -8,10 +8,29 @@ Market Regime Detector - Professional Grade
 import logging
 import numpy as np
 from enum import Enum
-from dataclasses import dataclass
-from typing import Optional, Dict, List
+from dataclasses import dataclass, field
+from typing import Optional, Dict, List, Any
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# ════════════════════════════════════════════════════════════════
+# TRADING SIGNAL (REQUIRED BY LONG_TERM_STRATEGY)
+# ════════════════════════════════════════════════════════════════
+
+@dataclass
+class TradingSignal:
+    """
+    სავაჭრო სიგნალის სტრუქტურა. 
+    აუცილებელია, რადგან long_term_strategy.py ამას ითხოვს იმპორტისას.
+    """
+    symbol: str
+    signal_type: str  # 'BUY', 'SELL', 'HOLD'
+    price: float
+    strength: float
+    strategy_name: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 # ════════════════════════════════════════════════════════════════
 # MARKET REGIME TYPES
@@ -56,7 +75,7 @@ class RegimeAnalysis:
         ] and self.volatility_percentile > 60
 
 # ════════════════════════════════════════════════════════════════
-# BASE STRATEGY (ADDED TO FIX IMPORT ERROR)
+# BASE STRATEGY (FIXES: ImportError: cannot import name 'BaseStrategy')
 # ════════════════════════════════════════════════════════════════
 
 class BaseStrategy:
@@ -92,7 +111,6 @@ class MarketRegimeDetector:
     ) -> RegimeAnalysis:
         """
         ძირითადი ფუნქცია - ბაზრის რეჟიმის გამოცნობა
-
         Returns: RegimeAnalysis with full context
         """
 
@@ -221,7 +239,6 @@ class MarketRegimeDetector:
         ტრენდის სიძლიერის გამოთვლა
         Returns: -1 (strong bear) to +1 (strong bull)
         """
-
         # Distance from EMA200
         distance_from_ema = (price - ema200) / ema200
 
@@ -243,7 +260,6 @@ class MarketRegimeDetector:
         ვოლატილობის პერცენტილი ისტორიულ მონაცემებზე
         Returns: 0-100
         """
-
         # Calculate daily returns
         returns = np.diff(price_history) / price_history[:-1]
 
@@ -265,11 +281,9 @@ class MarketRegimeDetector:
     ) -> bool:
         """
         სტრუქტურული მოძრაობაა თუ ხმაური?
-
         Structural = თანმიმდევრული, სტაბილური ტრენდი
         Noise = მერყეობა, არასტაბილური
         """
-
         # Last 50 candles consistency
         recent_prices = price_history[-50:]
         returns = np.diff(recent_prices) / recent_prices[:-1]
@@ -294,7 +308,6 @@ class MarketRegimeDetector:
         """
         ბოლინჯერის ზოლების ანალიზი
         """
-
         bb_range = bb_high - bb_low
         position_in_band = (price - bb_low) / bb_range if bb_range > 0 else 0.5
 
@@ -331,7 +344,6 @@ class MarketRegimeDetector:
         """
         რეჟიმის კლასიფიკაცია ყველა პარამეტრის გათვალისწინებით
         """
-
         # High Volatility Override
         if volatility_percentile > 85:
             return MarketRegime.HIGH_VOLATILITY
@@ -378,7 +390,6 @@ class MarketRegimeDetector:
         """
         Confidence Level გამოთვლა (0-100)
         """
-
         confidence = 50.0  # Base
 
         # Structural adds confidence
