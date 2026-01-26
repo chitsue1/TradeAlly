@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 class MarketRegime(Enum):
     """ბაზრის რეჟიმები"""
     BULL_STRONG = "bull_strong"           # ძლიერი აღმავალი
-    BULL_WEAK = "bull_weak"               # სუსტი აღმავალი
+    BULL_WEAK = "bull_weak"                # სუსტი აღმავალი
     BEAR_STRONG = "bear_strong"           # ძლიერი დაღმავალი
-    BEAR_WEAK = "bear_weak"               # სუსტი დაღმავალი
+    BEAR_WEAK = "bear_weak"                # სუსტი დაღმავალი
     RANGE_BOUND = "range_bound"           # ფლეტი/რენჯი
     HIGH_VOLATILITY = "high_volatility"   # ექსტრემალური ვოლატილობა
     CONSOLIDATION = "consolidation"       # კონსოლიდაცია
@@ -54,6 +54,15 @@ class RegimeAnalysis:
             MarketRegime.HIGH_VOLATILITY,
             MarketRegime.BREAKOUT_PENDING
         ] and self.volatility_percentile > 60
+
+# ════════════════════════════════════════════════════════════════
+# BASE STRATEGY (ADDED TO FIX IMPORT ERROR)
+# ════════════════════════════════════════════════════════════════
+
+class BaseStrategy:
+    """ბაზისური კლასი, რომელსაც სისტემა ეძებს"""
+    def __init__(self):
+        self.detector = MarketRegimeDetector()
 
 # ════════════════════════════════════════════════════════════════
 # MARKET REGIME DETECTOR
