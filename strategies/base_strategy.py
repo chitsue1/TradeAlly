@@ -22,6 +22,7 @@ class StrategyType(Enum):
     LONG_TERM = "long_term"
     SCALPING = "scalping"
     SWING = "swing"
+    OPPORTUNISTIC = "opportunistic"
 
 class ActionType(Enum):
     BUY = "buy"
