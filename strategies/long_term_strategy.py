@@ -308,5 +308,6 @@ class LongTermStrategy(BaseStrategy):
             reason += "High Growth აქტივი - მაღალი ზრდის პოტენციალი."
         elif tier == "MEME":
             reason += "Meme Coin - მაღალი ვოლატილობა, სწრაფი მოგების პოტენციალი."
+        self.record_activity()
 
         return reason

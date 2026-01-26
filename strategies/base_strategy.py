@@ -7,6 +7,8 @@ Market Regime Detector - Professional Grade
 
 import logging
 import numpy as np
+import sqlite3
+import logging
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Any
@@ -127,10 +129,55 @@ class BaseStrategy:
     აქ დევს საერთო ფუნქციონალი რისკის და ნდობის დასათვლელად.
     """
     def __init__(self, name: str, strategy_type: StrategyType):
-        self.name = name
-        self.strategy_type = strategy_type
-        self.detector = MarketRegimeDetector()
+            self.name = name
+            self.strategy_type = strategy_type
+            self.detector = MarketRegimeDetector()
+            # ბაზის სახელი
+            self.db_path = "trading_bot_memory.db"
+            self._init_stats_db()
 
+    def _init_stats_db(self):
+            """ქმნის ბაზას და ცხრილს სტატისტიკისთვის"""
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS strategy_stats (
+                        strategy_name TEXT PRIMARY KEY,
+                        total_signals INTEGER DEFAULT 0,
+                        last_active TIMESTAMP
+                    )
+                """)
+                conn.commit()
+
+    def record_activity(self):
+            """ინახავს მონაცემს, როცა სტრატეგია სიგნალს აგენერირებს"""
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT INTO strategy_stats (strategy_name, total_signals, last_active)
+                    VALUES (?, 1, ?)
+                    ON CONFLICT(strategy_name) DO UPDATE SET
+                        total_signals = total_signals + 1,
+                        last_active = excluded.last_active
+                """, (self.name, datetime.now().isoformat()))
+                conn.commit()
+
+    def get_statistics(self) -> Dict[str, Any]:
+            """ეს არის ის ფუნქცია, რომელსაც Trading Engine ეძებდა"""
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.execute(
+                        "SELECT total_signals, last_active FROM strategy_stats WHERE strategy_name = ?", 
+                        (self.name,)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        return {
+                            "signals": row[0],
+                            "last_signal": row[1]
+                        }
+                    return {"signals": 0, "last_signal": "Never"}
+            except Exception as e:
+                logger.error(f"Error fetching stats: {e}")
+                return {"signals": "N/A", "last_signal": "Error"}
     def _calculate_confidence(
         self, 
         regime_confidence: float, 
