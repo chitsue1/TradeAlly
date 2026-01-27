@@ -161,23 +161,32 @@ class BaseStrategy:
                 conn.commit()
 
     def get_statistics(self) -> Dict[str, Any]:
-            """ეს არის ის ფუნქცია, რომელსაც Trading Engine ეძებდა"""
-            try:
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.execute(
-                        "SELECT total_signals, last_active FROM strategy_stats WHERE strategy_name = ?", 
-                        (self.name,)
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        return {
-                            "signals": row[0],
-                            "last_signal": row[1]
-                        }
-                    return {"signals": 0, "last_signal": "Never"}
-            except Exception as e:
-                logger.error(f"Error fetching stats: {e}")
-                return {"signals": "N/A", "last_signal": "Error"}
+        """ეს არის ის ფუნქცია, რომელსაც Trading Engine ეძებდა"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT total_signals, last_active FROM strategy_stats WHERE strategy_name = ?", 
+                    (self.name,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "total_signals": row[0],    # ✅ შეცვლილი!
+                        "signals": row[0],           # ← legacy support
+                        "last_signal": row[1]
+                    }
+                return {
+                    "total_signals": 0,             # ✅ შეცვლილი!
+                    "signals": 0,
+                    "last_signal": "Never"
+                }
+        except Exception as e:
+            logger.error(f"Error fetching stats: {e}")
+            return {
+                "total_signals": 0,                 # ✅ შეცვლილი!
+                "signals": 0,
+                "last_signal": "Error"
+            }
     def _calculate_confidence(
         self, 
         regime_confidence: float, 
