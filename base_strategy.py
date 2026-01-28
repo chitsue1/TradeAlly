@@ -1,8 +1,9 @@
 """
-Market Regime Detector - Professional Grade
+Market Regime Detector - Professional Grade + Analytics Integration
 ✅ Bull / Bear / Range / High Volatility / Spontaneous Event
 ✅ Context-aware analysis
 ✅ NO blind indicator following
+✅ Full analytics tracking
 """
 
 import logging
@@ -129,39 +130,44 @@ class BaseStrategy:
     აქ დევს საერთო ფუნქციონალი რისკის და ნდობის დასათვლელად.
     """
     def __init__(self, name: str, strategy_type: StrategyType):
-            self.name = name
-            self.strategy_type = strategy_type
-            self.detector = MarketRegimeDetector()
-            # ბაზის სახელი
-            self.db_path = "trading_bot_memory.db"
-            self._init_stats_db()
+        self.name = name
+        self.strategy_type = strategy_type
+        self.detector = MarketRegimeDetector()
+        # ბაზის სახელი
+        self.db_path = "trading_bot_memory.db"
+        self._init_stats_db()
 
     def _init_stats_db(self):
-            """ქმნის ბაზას და ცხრილს სტატისტიკისთვის"""
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS strategy_stats (
-                        strategy_name TEXT PRIMARY KEY,
-                        total_signals INTEGER DEFAULT 0,
-                        last_active TIMESTAMP
-                    )
-                """)
-                conn.commit()
+        """ქმნის ბაზას და ცხრილს სტატისტიკისთვის"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS strategy_stats (
+                    strategy_name TEXT PRIMARY KEY,
+                    total_signals INTEGER DEFAULT 0,
+                    last_active TIMESTAMP
+                )
+            """)
+            conn.commit()
 
     def record_activity(self):
-            """ინახავს მონაცემს, როცა სტრატეგია სიგნალს აგენერირებს"""
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
-                    INSERT INTO strategy_stats (strategy_name, total_signals, last_active)
-                    VALUES (?, 1, ?)
-                    ON CONFLICT(strategy_name) DO UPDATE SET
-                        total_signals = total_signals + 1,
-                        last_active = excluded.last_active
-                """, (self.name, datetime.now().isoformat()))
-                conn.commit()
+        """ინახავს მონაცემს, როცა სტრატეგია სიგნალს აგენერირებს"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT INTO strategy_stats (strategy_name, total_signals, last_active)
+                VALUES (?, 1, ?)
+                ON CONFLICT(strategy_name) DO UPDATE SET
+                    total_signals = total_signals + 1,
+                    last_active = excluded.last_active
+            """, (self.name, datetime.now().isoformat()))
+            conn.commit()
 
     def get_statistics(self) -> Dict[str, Any]:
-        """ეს არის ის ფუნქცია, რომელსაც Trading Engine ეძებდა"""
+        """
+        ✅ FIXED: სტრატეგიის სტატისტიკის წაკითხვა
+
+        Returns:
+            Dict with both "total_signals" (new) and "signals" (legacy)
+        """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
@@ -169,24 +175,51 @@ class BaseStrategy:
                     (self.name,)
                 )
                 row = cursor.fetchone()
+
                 if row:
+                    total = row[0] or 0
+                    last = row[1] or "Never"
+
                     return {
-                        "total_signals": row[0],    # ✅ შეცვლილი!
-                        "signals": row[0],           # ← legacy support
-                        "last_signal": row[1]
+                        "total_signals": total,      # ✅ ახალი ფორმატი
+                        "signals": total,             # ✅ legacy support
+                        "last_signal": last,
+                        "last_active": last,
+                        "strategy_name": self.name,
+                        "strategy_type": self.strategy_type.value,
+                        "status": "active" if total > 0 else "waiting"
                     }
-                return {
-                    "total_signals": 0,             # ✅ შეცვლილი!
-                    "signals": 0,
-                    "last_signal": "Never"
-                }
-        except Exception as e:
-            logger.error(f"Error fetching stats: {e}")
+                else:
+                    # პირველი გაშვებისას
+                    return {
+                        "total_signals": 0,
+                        "signals": 0,
+                        "last_signal": "Never",
+                        "last_active": "Never",
+                        "strategy_name": self.name,
+                        "strategy_type": self.strategy_type.value,
+                        "status": "initialized"
+                    }
+
+        except sqlite3.Error as e:
+            logger.error(f"❌ Database error in {self.name}.get_statistics(): {e}")
             return {
-                "total_signals": 0,                 # ✅ შეცვლილი!
+                "total_signals": 0,
                 "signals": 0,
-                "last_signal": "Error"
+                "last_signal": "Database Error",
+                "strategy_name": self.name,
+                "status": "error"
             }
+        except Exception as e:
+            logger.error(f"❌ Unexpected error in {self.name}.get_statistics(): {e}")
+            return {
+                "total_signals": 0,
+                "signals": 0,
+                "last_signal": "Unknown Error",
+                "strategy_name": self.name,
+                "status": "error"
+            }
+
     def _calculate_confidence(
         self, 
         regime_confidence: float, 
@@ -227,6 +260,41 @@ class BaseStrategy:
             return "MEDIUM"
 
         return "LOW"
+
+    def _validate_signal(self, signal: TradingSignal) -> tuple[bool, str]:
+        """
+        ✅ NEW: სიგნალის ვალიდაცია გაგზავნამდე
+
+        ამოწმებს:
+        - ფასების ლოგიკურობას
+        - Risk/Reward ratio-ს
+        - Confidence threshold-ს
+        """
+        # ფასების ლოგიკური შემოწმება
+        if signal.target_price <= signal.entry_price:
+            return False, "Target price უნდა იყოს entry price-ზე მაღალი!"
+
+        if signal.stop_loss_price >= signal.entry_price:
+            return False, "Stop loss უნდა იყოს entry price-ზე დაბალი!"
+
+        # Risk/Reward ratio შემოწმება
+        potential_profit = (signal.target_price - signal.entry_price) / signal.entry_price
+        potential_loss = (signal.entry_price - signal.stop_loss_price) / signal.entry_price
+
+        risk_reward_ratio = potential_profit / potential_loss if potential_loss > 0 else 0
+
+        if risk_reward_ratio < 1.5:
+            return False, f"Risk/Reward ratio ძალიან დაბალია: {risk_reward_ratio:.2f} (მინ. 1.5)"
+
+        # Confidence შემოწმება
+        if signal.confidence_score < 50:
+            return False, f"Confidence ძალიან დაბალია: {signal.confidence_score:.1f}%"
+
+        # Extreme risk block
+        if signal.risk_level == "EXTREME" and signal.confidence_score < 75:
+            return False, "EXTREME რისკი დაბალი confidence-ით დაბლოკილია"
+
+        return True, "Signal validated ✅"
 
 # ════════════════════════════════════════════════════════════════
 # 5. MARKET REGIME DETECTOR

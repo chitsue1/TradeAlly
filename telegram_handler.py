@@ -9,12 +9,16 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 # ✅ FIXED: Import ALL message templates from config
 from config import *
 
+# ✅ NEW: Import analytics system
+from analytics_system import AnalyticsDatabase, AnalyticsDashboard
+
 logger = logging.getLogger(__name__)
 
 class TelegramHandler:
     """
     პროფესიონალური Telegram Bot Handler.
     მართავს მომხმარებლებს, გადახდებს, სიგნალების დაგზავნას და ადმინისტრირებას.
+    ✅ NEW: Analytics integration
     """
 
     def __init__(self, trading_engine):
@@ -31,6 +35,10 @@ class TelegramHandler:
         self.subscriptions = self.load_json(self.subscriptions_file)
         self.payment_requests = self.load_json(self.payment_requests_file)
         self.last_notifications = {}
+
+        # ✅ NEW: Analytics initialization
+        self.analytics_db = AnalyticsDatabase("trading_analytics.db")
+        self.dashboard = AnalyticsDashboard(self.analytics_db)
 
         # დაცვის მექანიზმები
         self._is_running = False
@@ -190,6 +198,171 @@ class TelegramHandler:
         """✅ FIXED: გამოიყენებს PAYMENT_INSTRUCTIONS config-დან"""
         await update.message.reply_text(PAYMENT_INSTRUCTIONS, parse_mode='Markdown')
 
+    # ════════════════════════════════════════════════════════════
+    # ✅ NEW: ANALYTICS COMMANDS (ADMIN ONLY)
+    # ════════════════════════════════════════════════════════════
+
+    async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        /stats - სრული Analytics Dashboard (მხოლოდ ადმინისთვის)
+        """
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("❌ არ ხართ ავტორიზებული.")
+            return
+
+        try:
+            # Generate dashboard
+            dashboard_text = self.dashboard.generate_text_dashboard()
+            await update.message.reply_text(dashboard_text, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"❌ Error generating stats: {e}")
+            await update.message.reply_text(f"❌ შეცდომა სტატისტიკის გენერაციისას: {e}")
+
+    async def cmd_active(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        /active - აქტიური სიგნალები (მხოლოდ ადმინისთვის)
+        """
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("❌ არ ხართ ავტორიზებული.")
+            return
+
+        try:
+            active_signals = self.analytics_db.get_active_signals()
+
+            if not active_signals:
+                await update.message.reply_text("📭 **ამ მომენტში არ არის აქტიური სიგნალები**")
+                return
+
+            text = "📊 **ACTIVE SIGNALS:**\n\n"
+
+            for sig in active_signals:
+                # Calculate current profit if we have price data
+                text += f"**{sig['symbol']}** ({sig['strategy']})\n"
+                text += f"├─ Entry: ${sig['entry_price']:.4f}\n"
+                text += f"├─ Target: ${sig['target_price']:.4f}\n"
+                text += f"├─ Stop: ${sig['stop_loss']:.4f}\n"
+                text += f"├─ Confidence: {sig['confidence']:.0f}%\n"
+                text += f"└─ Expected: +{sig['expected_profit']:.1f}%\n\n"
+
+            await update.message.reply_text(text, parse_mode='Markdown')
+
+        except Exception as e:
+            logger.error(f"❌ Error in /active: {e}")
+            await update.message.reply_text(f"❌ შეცდომა: {e}")
+
+    async def cmd_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        /history SYMBOL - კონკრეტული აქტივის ისტორია (მხოლოდ ადმინისთვის)
+        """
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("❌ არ ხართ ავტორიზებული.")
+            return
+
+        if not context.args:
+            await update.message.reply_text("📝 გამოყენება: /history SYMBOL\n\nმაგალითი: /history BTCUSDT")
+            return
+
+        try:
+            symbol = context.args[0].upper()
+            history = self.analytics_db.get_symbol_history(symbol)
+
+            if history['total_signals'] == 0:
+                await update.message.reply_text(f"📭 **{symbol}** - ისტორია ცარიელია")
+                return
+
+            text = f"📜 **{symbol} TRADING HISTORY:**\n\n"
+            text += f"📊 სულ სიგნალები: {history['total_signals']}\n"
+            text += f"✅ წარმატებული: {history['wins']}\n"
+            text += f"📈 Win Rate: {history['win_rate']:.1f}%\n"
+            text += f"💰 საშუალო მოგება: {history['avg_profit']:+.2f}%\n"
+
+            await update.message.reply_text(text, parse_mode='Markdown')
+
+        except Exception as e:
+            logger.error(f"❌ Error in /history: {e}")
+            await update.message.reply_text(f"❌ შეცდომა: {e}")
+
+    async def cmd_performance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        /performance - სტრატეგიების შედარება (მხოლოდ ადმინისთვის)
+        """
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("❌ არ ხართ ავტორიზებული.")
+            return
+
+        try:
+            text = "🎯 **STRATEGY PERFORMANCE COMPARISON:**\n\n"
+
+            for strategy in ['long_term', 'scalping', 'opportunistic']:
+                perf = self.analytics_db.get_strategy_performance(strategy)
+
+                if perf['total_signals'] == 0:
+                    text += f"**{strategy.upper()}:** მონაცემები არ არის\n\n"
+                    continue
+
+                text += f"**{strategy.upper()}:**\n"
+                text += f"├─ სიგნალები: {perf['total_signals']}\n"
+                text += f"├─ Win Rate: {perf['success_rate']:.1f}%\n"
+                text += f"├─ Avg Profit: {perf['avg_profit']:+.2f}%\n"
+                text += f"├─ საუკეთესო: {perf['best_trade']:+.2f}%\n"
+                text += f"├─ უარესი: {perf['worst_trade']:+.2f}%\n"
+                text += f"└─ Avg Hold: {perf['avg_hold_hours']:.1f}h\n\n"
+
+            await update.message.reply_text(text, parse_mode='Markdown')
+
+        except Exception as e:
+            logger.error(f"❌ Error in /performance: {e}")
+            await update.message.reply_text(f"❌ შეცდომა: {e}")
+
+    async def cmd_recent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        /recent - ბოლო სიგნალები (მხოლოდ ადმინისთვის)
+        """
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("❌ არ ხართ ავტორიზებული.")
+            return
+
+        try:
+            limit = 10
+            if context.args:
+                try:
+                    limit = int(context.args[0])
+                    limit = min(max(limit, 1), 20)  # 1-20 range
+                except:
+                    pass
+
+            recent = self.analytics_db.get_recent_signals(limit)
+
+            if not recent:
+                await update.message.reply_text("📭 **სიგნალები ჯერ არ არის**")
+                return
+
+            text = f"📝 **ბოლო {len(recent)} სიგნალი:**\n\n"
+
+            for sig in recent:
+                # Status emoji
+                if sig['outcome'] == 'SUCCESS':
+                    emoji = "✅"
+                elif sig['outcome'] == 'FAILURE':
+                    emoji = "❌"
+                else:
+                    emoji = "⏳"
+
+                # Profit display
+                if sig['profit'] is not None:
+                    profit_str = f"{sig['profit']:+.2f}%"
+                else:
+                    profit_str = "Pending"
+
+                text += f"{emoji} **{sig['symbol']}** ({sig['strategy']})\n"
+                text += f"   └─ {profit_str} | Conf: {sig['confidence']:.0f}%\n"
+
+            await update.message.reply_text(text, parse_mode='Markdown')
+
+        except Exception as e:
+            logger.error(f"❌ Error in /recent: {e}")
+            await update.message.reply_text(f"❌ შეცდომა: {e}")
+
     # ========================
     # ადმინისტრატორის ფუნქციები
     # ========================
@@ -206,7 +379,11 @@ class TelegramHandler:
             "/listusers - ყველა მომხმარებელი\n\n"
             "**სტატისტიკა:**\n"
             "/botstats - ბოტის სტატისტიკა\n"
-            "/signals - სიგნალების სტატისტიკა"
+            "/stats - სრული Analytics Dashboard 📊\n"
+            "/active - აქტიური სიგნალები\n"
+            "/performance - სტრატეგიების შედარება\n"
+            "/history [SYMBOL] - აქტივის ისტორია\n"
+            "/recent [N] - ბოლო N სიგნალი"
         )
         await update.message.reply_text(msg, parse_mode='Markdown')
 
@@ -407,6 +584,13 @@ class TelegramHandler:
         self.application.add_handler(CommandHandler("tiers", self.cmd_tiers))
         self.application.add_handler(CommandHandler("mystatus", self.cmd_mystatus))
         self.application.add_handler(CommandHandler("subscribe", self.cmd_subscribe))
+
+        # ✅ NEW: Analytics commands (Admin only)
+        self.application.add_handler(CommandHandler("stats", self.cmd_stats))
+        self.application.add_handler(CommandHandler("active", self.cmd_active))
+        self.application.add_handler(CommandHandler("history", self.cmd_history))
+        self.application.add_handler(CommandHandler("performance", self.cmd_performance))
+        self.application.add_handler(CommandHandler("recent", self.cmd_recent))
 
         # Admin commands
         self.application.add_handler(CommandHandler("admin", self.cmd_admin))
