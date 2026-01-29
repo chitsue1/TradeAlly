@@ -75,6 +75,47 @@ class TradingSignal:
     @property
     def price(self) -> float:
         return self.entry_price
+def to_message(self) -> str:
+    '''Convert signal to Telegram message format'''
+    emoji = "🟢" if self.action == ActionType.BUY else "🔴"
+
+    message = f'''
+{emoji} **{self.action.value.upper()} SIGNAL**
+
+**Asset:** {self.symbol}
+**Strategy:** {self.strategy_type.value.replace('_', ' ').title()}
+
+**📊 Price Info:**
+• Entry: ${self.entry_price:.4f}
+• Target: ${self.target_price:.4f} (+{((self.target_price/self.entry_price-1)*100):.1f}%)
+• Stop Loss: ${self.stop_loss_price:.4f} ({((self.stop_loss_price/self.entry_price-1)*100):.1f}%)
+
+**🎯 Expected:**
+• Min Profit: +{self.expected_profit_min:.1f}%
+• Max Profit: +{self.expected_profit_max:.1f}%
+• Hold Duration: {self.expected_hold_duration}
+
+**📈 Confidence:**
+• Level: {self.confidence_level.value.upper()}
+• Score: {self.confidence_score:.0f}%
+• Risk: {self.risk_level}
+
+**💡 Reasoning:**
+{self.primary_reason}
+
+**✅ Supporting Factors:**
+{chr(10).join(f'• {reason}' for reason in self.supporting_reasons[:3])}
+
+**⚠️ Risk Factors:**
+{chr(10).join(f'• {risk}' for risk in self.risk_factors[:2])}
+
+**🧠 Market Regime:** {self.market_regime}
+**🕐 Signal Time:** {self.entry_timestamp}
+    '''
+
+    return message.strip()
+"""
+
 
 # ════════════════════════════════════════════════════════════════
 # 3. MARKET REGIME TYPES & ANALYSIS
