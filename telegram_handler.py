@@ -544,13 +544,18 @@ class TelegramHandler:
         now = time.time()
 
         # Cooldown დაცვა (config-დან)
-        if now - self.last_notifications.get(asset, 0) < NOTIFICATION_COOLDOWN:
-            logger.debug(f"⏸️ Cooldown active for {asset}")
-            return
+        async def broadcast_signal(self, message, asset):
+            """
+            ✅ NO COOLDOWN - სტრატეგიები აკონტროლებენ!
+            """
 
-        self.last_notifications[asset] = now
+            # ✅ პირდაპირ გაგზავნა
+            full_message = message + GUIDE_FOOTER
+            active_users = self.get_active_subscribers()
 
-        # ✅ დაემატება GUIDE_FOOTER config-დან
+            for user_id in active_users:
+                await self.bot.send_message(...)
+                # ✅ დაემატება GUIDE_FOOTER config-დან
         full_message = message + GUIDE_FOOTER
 
         active_users = self.get_active_subscribers()

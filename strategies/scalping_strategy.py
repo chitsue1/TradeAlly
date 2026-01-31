@@ -1,8 +1,9 @@
 """
-Scalping Strategy
-✅ წუთები → საათები
-✅ მაღალი ლიკვიდურობა + მოცულობის ზრდა
-✅ სწრაფი მოგება, სწრაფი გასვლა
+Scalping Strategy - Realistic Edition
+✅ 5-10% მოგების სწრაფი დაჭერა
+✅ უფრო რბილი Entry პირობები
+✅ Per-symbol cooldown (არა გლობალური!)
+✅ 30 წუთიანი hold → ავტომატური exit
 """
 
 import logging
@@ -18,17 +19,19 @@ logger = logging.getLogger(__name__)
 
 class ScalpingStrategy(BaseStrategy):
     """
-    სკალპინგის სტრატეგია
+    სკალპინგის სტრატეგია - რეალისტური ვერსია
 
-    მიზანი: 0.5% - 2.5% მოგება მოკლე დროში
+    🎯 მიზანი: 5-10% სწრაფი მოგება 30 წუთში
 
-    რა არის "სკალპინგის შესაძლებლობა":
-    1. მაღალი ვოლატილობა
-    2. მკვეთრი იმპულსი
-    3. მოკლევადიანი ჰაიპი
-    4. გარღვევის მომენტი
+    📊 Entry Criteria (უფრო რბილი):
+    1. RSI < 40 (არა 35!)
+    2. ფასი BB-ის ქვედა 50%-ში (არა მხოლოდ ძალიან ქვევით)
+    3. ვოლატილობა მაღალია (50+ პერცენტილი)
 
-    ⚠️ CRITICAL: სკალპინგი ყოველთვის მოითხოვს გაყიდვის შეტყობინებას!
+    ⏱️ Cooldown Logic:
+    - თითოეულ კრიპტოზე ცალკე tracking
+    - გაიყიდა → ახალი BUY შესაძლებელია
+    - არ გაიყიდა → არა ახალი BUY იმავე კრიპტოზე
     """
 
     def __init__(self):
@@ -37,13 +40,15 @@ class ScalpingStrategy(BaseStrategy):
             strategy_type=StrategyType.SCALPING
         )
 
-        # Very short cooldown (30 minutes)
-        self.last_signal_time = {}
-        self.cooldown_minutes = 30
+        # ════════════════════════════════════════════════════════
+        # PER-SYMBOL TRACKING
+        # ════════════════════════════════════════════════════════
 
-        # Scalping არის high-frequency → მაქსიმუმ 3 სიგნალი დღეში per asset
-        self.daily_signal_count = {}
-        self.max_daily_signals = 3
+        # აქტიური scalping პოზიციები
+        self.active_scalp_positions = set()  # {symbol1, symbol2, ...}
+
+        # ბოლო სიგნალის დრო (backup tracking)
+        self.last_signal_time = {}  # symbol → datetime
 
     def analyze(
         self,
@@ -56,72 +61,90 @@ class ScalpingStrategy(BaseStrategy):
     ) -> Optional[TradingSignal]:
         """
         სკალპინგის შესაძლებლობის ანალიზი
+
+        ✅ უფრო რბილი პირობები - იშვიათად არ არის!
         """
 
         # ════════════════════════════════════════════════════════
         # 1. PRE-FLIGHT CHECKS
         # ════════════════════════════════════════════════════════
 
-        # Cooldown + Daily limit
-        if not self._check_cooldown(symbol):
-            return None
-
-        if not self._check_daily_limit(symbol):
-            return None
-
-        # ════════════════════════════════════════════════════════
-        # 2. REGIME VALIDATION
-        # ════════════════════════════════════════════════════════
-
-        # სკალპინგი შესაძლებელია მაღალ ვოლატილობაში
-        if not regime_analysis.is_favorable_for_scalping():
+        # ✅ აქვს თუ არა უკვე აქტიური scalp პოზიცია?
+        if symbol in self.active_scalp_positions:
             logger.debug(
-                f"[SCALPING] {symbol} არაღელსაყრელი რეჟიმი: "
-                f"{regime_analysis.regime.value}"
+                f"[SCALPING] {symbol} უკვე აქვს აქტიური პოზიცია - "
+                f"ველოდებით exit-ს (30წთ)"
+            )
+            return None
+
+        # ✅ არის თუ არა existing position?
+        if existing_position and hasattr(existing_position, 'buy_signals_sent'):
+            if existing_position.buy_signals_sent >= 1:
+                self.active_scalp_positions.add(symbol)
+                logger.debug(f"[SCALPING] {symbol} existing position detected")
+                return None
+
+        # ════════════════════════════════════════════════════════
+        # 2. REGIME VALIDATION - უფრო რბილი!
+        # ════════════════════════════════════════════════════════
+
+        # ✅ CHANGED: არა მხოლოდ "is_favorable_for_scalping"
+        # სკალპინგი შესაძლებელია როცა ვოლატილობა 50%+ არის
+
+        if regime_analysis.volatility_percentile < 50:
+            logger.debug(
+                f"[SCALPING] {symbol} ვოლატილობა ძალიან დაბალია: "
+                f"{regime_analysis.volatility_percentile:.0f}%"
             )
             return None
 
         # ════════════════════════════════════════════════════════
-        # 3. TECHNICAL VALIDATION
+        # 3. TECHNICAL VALIDATION - უფრო რბილი!
         # ════════════════════════════════════════════════════════
 
-        rsi = technical_data['rsi']
-        ema200 = technical_data['ema200']
-        bb_low = technical_data['bb_low']
-        bb_high = technical_data['bb_high']
+        rsi = technical_data.get('rsi', 50)
+        ema200 = technical_data.get('ema200', price)
+        bb_low = technical_data.get('bb_low', price)
+        bb_high = technical_data.get('bb_high', price)
 
-        # სკალპინგის პირობები:
-        # 1. RSI < 35 (მძლავრი გადაყიდვა)
-        # 2. ფასი ბოლინჯერის ძალიან ქვედა ზონაში
-        # 3. მაღალი ვოლატილობა (უკვე რეჟიმში შემოწმებული)
-
-        if rsi > 35:
-            logger.debug(f"[SCALPING] {symbol} RSI არ არის საკმარისად დაბალი: {rsi:.1f}")
+        # ✅ CHANGED: RSI < 40 (იყო 35!)
+        if rsi > 40:
+            logger.debug(
+                f"[SCALPING] {symbol} RSI ძალიან მაღალია: {rsi:.1f} "
+                f"(მაქს. 40)"
+            )
             return None
 
-        # ფასი უნდა იყოს BB low-ს ძალიან ახლოს (oversold bounce)
-        if price > bb_low * 1.03:
-            logger.debug(f"[SCALPING] {symbol} არ არის BB low-ს ახლოს")
+        # ✅ CHANGED: ფასი BB-ის ქვედა 50%-ში (არა მხოლოდ ძალიან ქვევით!)
+        bb_range = bb_high - bb_low
+        bb_position = (price - bb_low) / bb_range if bb_range > 0 else 0.5
+
+        if bb_position > 0.5:  # ზედა ნახევარში არის
+            logger.debug(
+                f"[SCALPING] {symbol} ფასი BB-ის ზედა ნახევარშია "
+                f"({bb_position*100:.0f}%)"
+            )
             return None
 
         # ════════════════════════════════════════════════════════
-        # 4. PROFIT TARGET CALCULATION
+        # 4. PROFIT TARGET - 5-10% რეალისტური!
         # ════════════════════════════════════════════════════════
 
-        # სკალპინგი: 0.5% - 2.5% მოგება
-        # Tier-ის მიხედვით:
         if tier == "BLUE_CHIP":
-            profit_target = 1.0  # 1%
-            hold_time = "30-60 წუთი"
+            profit_target = 5.0  # 5%
+            hold_time = "20-30 წუთი"
         elif tier == "HIGH_GROWTH":
-            profit_target = 1.5  # 1.5%
-            hold_time = "20-45 წუთი"
-        elif tier == "MEME":
-            profit_target = 2.5  # 2.5%
+            profit_target = 7.0  # 7%
             hold_time = "15-30 წუთი"
+        elif tier == "MEME":
+            profit_target = 10.0  # 10%
+            hold_time = "10-20 წუთი"
+        elif tier == "NARRATIVE":
+            profit_target = 8.0  # 8%
+            hold_time = "15-25 წუთი"
         else:
-            profit_target = 1.5
-            hold_time = "20-45 წუთი"
+            profit_target = 7.0
+            hold_time = "15-30 წუთი"
 
         # ════════════════════════════════════════════════════════
         # 5. CONFIDENCE CALCULATION
@@ -129,30 +152,41 @@ class ScalpingStrategy(BaseStrategy):
 
         technical_score = 0
 
+        # RSI scoring (რბილი)
         if rsi < 25:
             technical_score += 50
         elif rsi < 30:
-            technical_score += 35
-
-        if price <= bb_low:
             technical_score += 40
-        elif price <= bb_low * 1.02:
-            technical_score += 25
+        elif rsi < 35:
+            technical_score += 30
+        elif rsi < 40:
+            technical_score += 20
 
-        if regime_analysis.volatility_percentile > 80:
+        # BB position
+        if bb_position < 0.2:  # ძალიან ქვევით
+            technical_score += 40
+        elif bb_position < 0.35:
+            technical_score += 30
+        elif bb_position < 0.5:
+            technical_score += 20
+
+        # Volatility boost
+        if regime_analysis.volatility_percentile > 70:
+            technical_score += 15
+        elif regime_analysis.volatility_percentile > 50:
             technical_score += 10
 
         confidence_level, confidence_score = self._calculate_confidence(
             regime_confidence=regime_analysis.confidence,
             technical_alignment=technical_score,
-            structural_confidence=70  # სკალპინგი არ საჭიროებს სტრუქტურულობას
+            structural_confidence=60  # სკალპინგი - საშუალო
         )
 
-        # Minimum confidence threshold (სკალპინგი უფრო რისკიანია)
-        if confidence_score < 65:
+        # ✅ CHANGED: Confidence threshold 55% (იყო 65!)
+        if confidence_score < 55:
             logger.debug(
-                f"[SCALPING] {symbol} confidence ძალიან დაბალია: "
-                f"{confidence_score:.0f}%"
+                f"[SCALPING] {symbol} confidence დაბალია: "
+                f"{confidence_score:.0f}% (მინ. 55%)"
             )
             return None
 
@@ -161,33 +195,45 @@ class ScalpingStrategy(BaseStrategy):
         # ════════════════════════════════════════════════════════
 
         primary_reason = (
-            f"{symbol} მაღალ ვოლატილობაში იმყოფება და "
-            f"გადაყიდულ ზონაშია. სწრაფი bounce-ის მაღალი ალბათობა."
+            f"{symbol} მაღალ ვოლატილობაშია და დროებით oversold ზონაში. "
+            f"სწრაფი bounce-ის პოტენციალი 5-10% მოგებისთვის."
         )
 
-        supporting_reasons = [
-            f"ძლიერი გადაყიდვა (RSI: {rsi:.1f})",
-            f"ბოლინჯერის ქვედა ზოლთან",
-            f"მაღალი ვოლატილობა ({regime_analysis.volatility_percentile:.0f} პერცენტილი)"
-        ]
+        supporting_reasons = []
+
+        if rsi < 30:
+            supporting_reasons.append(f"🔵 გადაყიდულია (RSI: {rsi:.1f})")
+        elif rsi < 40:
+            supporting_reasons.append(f"🔵 დროებით oversold (RSI: {rsi:.1f})")
+
+        if bb_position < 0.35:
+            supporting_reasons.append(
+                f"📉 ბოლინჯერის ქვედა ზონაში ({bb_position*100:.0f}%)"
+            )
+
+        supporting_reasons.append(
+            f"⚡ მაღალი ვოლატილობა "
+            f"({regime_analysis.volatility_percentile:.0f} პერცენტილი)"
+        )
 
         risk_factors = [
-            "⚠️ სკალპინგი არის მაღალი რისკი - სწრაფი გადაწყვეტილებები",
-            "💨 პოზიცია არ უნდა დარჩეს ღია დიდხანს"
+            "⚠️ სკალპინგი - სწრაფი exit საჭიროა (30 წუთი)",
+            "💨 მაღალი რისკი, მაღალი მოგება"
         ]
 
-        for warning in regime_analysis.warning_flags:
-            risk_factors.append(warning)
+        for warning in regime_analysis.warning_flags[:2]:
+            risk_factors.append(f"⚠️ {warning}")
 
         # ════════════════════════════════════════════════════════
         # 7. RISK ASSESSMENT
         # ════════════════════════════════════════════════════════
 
-        # სკალპინგი ყოველთვის HIGH ან EXTREME რისკია
-        if regime_analysis.volatility_percentile > 90:
+        if regime_analysis.volatility_percentile > 85:
             risk_level = "EXTREME"
-        else:
+        elif regime_analysis.volatility_percentile > 65:
             risk_level = "HIGH"
+        else:
+            risk_level = "MEDIUM"
 
         # ════════════════════════════════════════════════════════
         # 8. SIGNAL CONSTRUCTION
@@ -199,7 +245,7 @@ class ScalpingStrategy(BaseStrategy):
             strategy_type=StrategyType.SCALPING,
             entry_price=price,
             target_price=price * (1 + profit_target / 100),
-            stop_loss_price=price * 0.97,  # -3% tight stop-loss
+            stop_loss_price=price * 0.95,  # -5% stop-loss (უფრო რბილი)
             expected_hold_duration=hold_time,
             entry_timestamp=datetime.now().isoformat(),
             confidence_level=confidence_level,
@@ -211,7 +257,7 @@ class ScalpingStrategy(BaseStrategy):
             expected_profit_min=profit_target * 0.5,
             expected_profit_max=profit_target,
             market_regime=regime_analysis.regime.value,
-            requires_sell_notification=True  # ✅ CRITICAL!
+            requires_sell_notification=True  # ✅ სწრაფი exit!
         )
 
         return signal
@@ -223,64 +269,54 @@ class ScalpingStrategy(BaseStrategy):
     ) -> tuple[bool, str]:
         """
         უნდა გაიგზავნოს სიგნალი?
+
+        ✅ უფრო რბილი validation
         """
 
-        # Confidence threshold (უფრო მკაცრი)
-        if signal.confidence_score < 65:
-            return False, f"confidence ძალიან დაბალია ({signal.confidence_score:.0f}%)"
+        # ✅ Confidence threshold 55% (იყო 65!)
+        if signal.confidence_score < 55:
+            return False, f"confidence დაბალია ({signal.confidence_score:.0f}% < 55%)"
 
-        # Update tracking
+        # ✅ Extreme risk block (მხოლოდ ექსტრემალური)
+        if signal.risk_level == "EXTREME" and signal.confidence_score < 65:
+            return False, "EXTREME რისკი დაბალი confidence-ით"
+
+        # ✅ Double-check active position
+        if symbol in self.active_scalp_positions:
+            return False, "აქტიური scalp პოზიცია უკვე არსებობს"
+
+        # ✅ Mark as active
+        self.active_scalp_positions.add(symbol)
         self.last_signal_time[symbol] = datetime.now()
 
-        today = datetime.now().date()
-        if symbol not in self.daily_signal_count:
-            self.daily_signal_count[symbol] = {}
-
-        if today not in self.daily_signal_count[symbol]:
-            self.daily_signal_count[symbol][today] = 0
-
-        self.daily_signal_count[symbol][today] += 1
+        logger.info(
+            f"[SCALPING] ✅ {symbol} დაემატა active scalp positions-ში. "
+            f"Auto-exit: 30 წუთში"
+        )
 
         return True, "სკალპინგის პირობები დაკმაყოფილებულია"
 
     # ════════════════════════════════════════════════════════════
-    # HELPER METHODS
+    # ✅ NEW: POSITION CLEANUP
     # ════════════════════════════════════════════════════════════
 
-    def _check_cooldown(self, symbol: str) -> bool:
-        """Cooldown შემოწმება (30 წუთი)"""
-        if symbol not in self.last_signal_time:
-            return True
+    def mark_position_closed(self, symbol: str):
+        """
+        გამოძახება როცა scalp პოზიცია იხურება
 
-        last_time = self.last_signal_time[symbol]
-        minutes_since = (datetime.now() - last_time).total_seconds() / 60
-
-        if minutes_since < self.cooldown_minutes:
-            logger.debug(
-                f"[SCALPING] {symbol} cooldown ({minutes_since:.1f}min / "
-                f"{self.cooldown_minutes}min)"
+        ✅ ახლა ახალი BUY შესაძლებელია
+        """
+        if symbol in self.active_scalp_positions:
+            self.active_scalp_positions.remove(symbol)
+            logger.info(
+                f"[SCALPING] ✅ {symbol} scalp პოზიცია დახურულია. "
+                f"ახალი BUY შესაძლებელია."
             )
-            return False
 
-        return True
+    def clear_position(self, symbol: str):
+        """Alias for mark_position_closed"""
+        self.mark_position_closed(symbol)
 
-    def _check_daily_limit(self, symbol: str) -> bool:
-        """დღიური ლიმიტის შემოწმება (მაქს 3)"""
-        today = datetime.now().date()
-
-        if symbol not in self.daily_signal_count:
-            return True
-
-        if today not in self.daily_signal_count[symbol]:
-            return True
-
-        count = self.daily_signal_count[symbol][today]
-
-        if count >= self.max_daily_signals:
-            logger.debug(
-                f"[SCALPING] {symbol} დღიური ლიმიტი მიღწეულია "
-                f"({count}/{self.max_daily_signals})"
-            )
-            return False
-
-        return True
+    def get_active_positions(self) -> set:
+        """აქტიური scalp პოზიციების სია"""
+        return self.active_scalp_positions.copy()

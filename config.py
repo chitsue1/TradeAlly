@@ -48,6 +48,10 @@ TIER_1_BLUE_CHIPS = [
     "LINK/USD",  # Chainlink - Oracle მონოპოლია
     "MATIC/USD", # Polygon - Ethereum scaling
     "DOT/USD",   # Polkadot - Parachains
+    "TRX/USD",   # Tron - stablecoin volume ლიდერი
+    "LTC/USD",   # Litecoin - liquidity + longevity
+    "XLM/USD",   # Stellar - payments + CBDC focus
+    "ETC/USD",   # Ethereum Classic - PoW hedge
 ]
 
 # 🟢 Tier 2: High Growth (მაღალი ზრდის პოტენციალი)
@@ -60,6 +64,11 @@ TIER_2_HIGH_GROWTH = [
     "APT/USD",   # Aptos - Move language
     "UNI/USD",   # Uniswap - DEX ლიდერი
     "ATOM/USD",  # Cosmos - IBC ინტერნეტი
+    "FTM/USD",   # Fantom - DeFi revival cycles
+    "KAS/USD",   # Kaspa - PoW + high TPS narrative
+    "RUNE/USD",  # Thorchain - cross-chain liquidity
+    "EGLD/USD",  # MultiversX - infra + adoption
+    "MINA/USD",  # Mina - light blockchain narrative
 ]
 
 # 🟡 Tier 3: Meme/Volatility (მაღალი ვოლატილობა, სწრაფი მოგება)
@@ -69,6 +78,10 @@ TIER_3_MEME_COINS = [
     "WIF/USD",   # Dogwifhat - Solana meme
     "BONK/USD",  # Bonk - Solana meme
     "FLOKI/USD", # Floki Inu - მემე + utility
+    "BRETT/USD", # Base ecosystem meme
+    "POPCAT/USD",# Solana meme volatility
+    "BOME/USD",  # High-risk narrative meme
+    "MYRO/USD",  # Early Solana meme
 ]
 
 # 🟣 Tier 4: Narrative Plays (AI, Gaming, RWA)
@@ -78,6 +91,11 @@ TIER_4_NARRATIVE = [
     "AGIX/USD",  # SingularityNET - AGI
     "GALA/USD",  # Gala Games - Web3 gaming
     "IMX/USD",   # Immutable X - NFT gaming L2
+    "ONDO/USD",  # RWA leader
+    "CFG/USD",   # Centrifuge - real-world assets
+    "AKT/USD",   # Akash - decentralized cloud / AI
+    "TAO/USD",   # Bittensor - AI subnet economy
+    "PIXEL/USD", # Gaming + social narrative
 ]
 
 # 🔴 Tier 5: New/Emerging (ახალი პროექტები, მაღალი რისკი)
@@ -88,6 +106,11 @@ TIER_5_EMERGING = [
     "LTC/USD",   # Litecoin - "silver to Bitcoin's gold"
     "BCH/USD",   # Bitcoin Cash - payments focus
     "TON/USD",   # Toncoin - Telegram blockchain
+    "PYTH/USD",  # Oracle for Solana ecosystem
+    "JTO/USD",   # Solana liquid staking
+    "DYM/USD",   # Modular rollapps
+    "ZK/USD",    # ZK ecosystem exposure
+    "AEVO/USD",  # Derivatives + options narrative
 ]
 
 # ✅ COMBINED LIST (all tiers)
