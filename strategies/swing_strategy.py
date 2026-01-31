@@ -3,9 +3,9 @@ from .base_strategy import BaseStrategy, StrategyType
 
 logger = logging.getLogger(__name__)
 
-class ScalpingStrategy(BaseStrategy):
+class SwingStrategy(BaseStrategy):
     def __init__(self, config=None):
-        super().__init__("Scalping", StrategyType.SCALPING)
+        super().__init__("Swing", StrategyType.SWING)
 
     async def analyze(self, symbol, price, regime_analysis, technical_data, tier, existing_position):
         return None
