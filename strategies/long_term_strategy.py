@@ -303,8 +303,8 @@ class LongTermStrategy(BaseStrategy):
         """
 
         # ✅ 1. Confidence threshold (70%+)
-        if signal.confidence_score < 70:
-            return False, f"confidence არასაკმარისია ({signal.confidence_score:.0f}% < 70%)"
+        if signal.confidence_score < 60:
+            return False, f"confidence არასაკმარისია ({signal.confidence_score:.0f}% < 60%)"
 
         # ✅ 2. Extreme risk block
         if signal.risk_level == "EXTREME":
