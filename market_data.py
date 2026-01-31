@@ -1,6 +1,6 @@
 """
-Market Data Provider - PRODUCTION VERSION v2.1
-✅ FIXED: ყველა 34 კრიპტო დამატებულია
+Market Data Provider - PRODUCTION VERSION v2.2
+✅ ყველა 57 კრიპტო დამატებულია
 ✅ Integrated with existing Trading Engine
 ✅ Sources: CoinGecko → Binance → Yahoo Finance
 ✅ Circuit Breaker + Exponential Backoff
@@ -61,15 +61,14 @@ class CircuitBreakerState:
 
 class MultiSourceDataProvider:
     """
-    🚀 PRODUCTION-GRADE DATA PROVIDER
+    🚀 PRODUCTION-GRADE DATA PROVIDER - v2.2
 
     Features:
-    - Singleton pattern (one instance across app)
+    - Singleton pattern
     - Circuit breaker for each API source
     - Exponential backoff on rate limits
     - Intelligent fallback cascade: CoinGecko → Binance → Yahoo
-    - Professional logging
-    - Compatible with existing Trading Engine
+    - ✅ 57 კრიპტო მხარდაჭერა
     """
 
     _instance = None
@@ -104,22 +103,25 @@ class MultiSourceDataProvider:
         }
 
         # Configuration
-        self.CIRCUIT_BREAKER_THRESHOLD = 3  # Open after 3 consecutive failures
-        self.CIRCUIT_BREAKER_TIMEOUT = 300  # 5 minutes
+        self.CIRCUIT_BREAKER_THRESHOLD = 3
+        self.CIRCUIT_BREAKER_TIMEOUT = 300
         self.MAX_RETRIES = 3
-        self.BASE_DELAY = 1  # Base delay for exponential backoff
+        self.BASE_DELAY = 1
 
-        # Symbol mappings
+        # ✅ Initialize ALL 57 crypto mappings
         self._init_symbol_mappings()
 
-        logger.info("🟢 MultiSourceDataProvider initialized (Singleton)")
+        logger.info("🟢 MultiSourceDataProvider v2.2 initialized (57 cryptos)")
 
     def _init_symbol_mappings(self):
-        """Initialize all symbol mappings - ✅ FIXED: ყველა 34 კრიპტო"""
+        """Initialize all symbol mappings - ✅ 57 კრიპტო COMPLETE"""
 
-        # CoinGecko IDs (crypto only) - ✅ 34 COMPLETE
+        # ═══════════════════════════════════════════════════════════
+        # COINGECKO IDs (57 კრიპტო)
+        # ═══════════════════════════════════════════════════════════
+
         self.coingecko_ids = {
-            # Tier 1: Blue Chips (10)
+            # Tier 1: Blue Chips (14)
             "BTC/USD": "bitcoin",
             "ETH/USD": "ethereum",
             "BNB/USD": "binancecoin",
@@ -129,9 +131,13 @@ class MultiSourceDataProvider:
             "AVAX/USD": "avalanche-2",
             "LINK/USD": "chainlink",
             "MATIC/USD": "matic-network",
-            "DOT/USD": "polkadot",  # ✅ დამატებული
+            "DOT/USD": "polkadot",
+            "TRX/USD": "tron",
+            "LTC/USD": "litecoin",
+            "XLM/USD": "stellar",
+            "ETC/USD": "ethereum-classic",
 
-            # Tier 2: High Growth (8)
+            # Tier 2: High Growth (13)
             "NEAR/USD": "near",
             "ARB/USD": "arbitrum",
             "OP/USD": "optimism",
@@ -140,33 +146,54 @@ class MultiSourceDataProvider:
             "APT/USD": "aptos",
             "UNI/USD": "uniswap",
             "ATOM/USD": "cosmos",
+            "FTM/USD": "fantom",
+            "KAS/USD": "kaspa",
+            "RUNE/USD": "thorchain",
+            "EGLD/USD": "elrond-erd-2",
+            "MINA/USD": "mina-protocol",
 
-            # Tier 3: Meme/Volatility (5)
+            # Tier 3: Meme Coins (9)
             "DOGE/USD": "dogecoin",
             "PEPE/USD": "pepe",
             "WIF/USD": "dogwifcoin",
             "BONK/USD": "bonk",
             "FLOKI/USD": "floki",
+            "BRETT/USD": "brett",
+            "POPCAT/USD": "popcat",
+            "BOME/USD": "book-of-meme",
+            "MYRO/USD": "myro",
 
-            # Tier 4: Narrative Plays (5)
+            # Tier 4: Narrative (10)
             "RNDR/USD": "render-token",
             "FET/USD": "fetch-ai",
             "AGIX/USD": "singularitynet",
             "GALA/USD": "gala",
             "IMX/USD": "immutable-x",
+            "ONDO/USD": "ondo-finance",
+            "CFG/USD": "centrifuge",
+            "AKT/USD": "akash-network",
+            "TAO/USD": "bittensor",
+            "PIXEL/USD": "pixels",
 
-            # Tier 5: Emerging (6)
+            # Tier 5: Emerging (11)
             "SEI/USD": "sei-network",
             "TIA/USD": "celestia",
             "STRK/USD": "starknet",
-            "LTC/USD": "litecoin",
             "BCH/USD": "bitcoin-cash",
-            "TON/USD": "the-open-network",  # ✅ დამატებული
+            "TON/USD": "the-open-network",
+            "PYTH/USD": "pyth-network",
+            "JTO/USD": "jito-governance-token",
+            "DYM/USD": "dymension",
+            "ZK/USD": "zksync",
+            "AEVO/USD": "aevo",
         }
 
-        # Binance symbols (crypto only) - ✅ 34 COMPLETE
+        # ═══════════════════════════════════════════════════════════
+        # BINANCE SYMBOLS (57 კრიპტო)
+        # ═══════════════════════════════════════════════════════════
+
         self.binance_symbols = {
-            # Tier 1 (10)
+            # Tier 1 (14)
             "BTC/USD": "BTCUSDT",
             "ETH/USD": "ETHUSDT",
             "BNB/USD": "BNBUSDT",
@@ -176,9 +203,13 @@ class MultiSourceDataProvider:
             "AVAX/USD": "AVAXUSDT",
             "LINK/USD": "LINKUSDT",
             "MATIC/USD": "MATICUSDT",
-            "DOT/USD": "DOTUSDT",  # ✅ დამატებული
+            "DOT/USD": "DOTUSDT",
+            "TRX/USD": "TRXUSDT",
+            "LTC/USD": "LTCUSDT",
+            "XLM/USD": "XLMUSDT",
+            "ETC/USD": "ETCUSDT",
 
-            # Tier 2 (8)
+            # Tier 2 (13)
             "NEAR/USD": "NEARUSDT",
             "ARB/USD": "ARBUSDT",
             "OP/USD": "OPUSDT",
@@ -187,33 +218,54 @@ class MultiSourceDataProvider:
             "APT/USD": "APTUSDT",
             "UNI/USD": "UNIUSDT",
             "ATOM/USD": "ATOMUSDT",
+            "FTM/USD": "FTMUSDT",
+            "KAS/USD": "KASUSDT",
+            "RUNE/USD": "RUNEUSDT",
+            "EGLD/USD": "EGLDUSDT",
+            "MINA/USD": "MINAUSDT",
 
-            # Tier 3 (5)
+            # Tier 3 (9)
             "DOGE/USD": "DOGEUSDT",
             "PEPE/USD": "PEPEUSDT",
             "WIF/USD": "WIFUSDT",
             "BONK/USD": "BONKUSDT",
             "FLOKI/USD": "FLOKIUSDT",
+            "BRETT/USD": "BRETTUSDT",
+            "POPCAT/USD": "POPCATUSDT",
+            "BOME/USD": "BOMEUSDT",
+            "MYRO/USD": "MYROUSDT",
 
-            # Tier 4 (5)
+            # Tier 4 (10)
             "RNDR/USD": "RNDRUSDT",
             "FET/USD": "FETUSDT",
             "AGIX/USD": "AGIXUSDT",
             "GALA/USD": "GALAUSDT",
             "IMX/USD": "IMXUSDT",
+            "ONDO/USD": "ONDOUSDT",
+            "CFG/USD": "CFGUSDT",
+            "AKT/USD": "AKTUSDT",
+            "TAO/USD": "TAOUSDT",
+            "PIXEL/USD": "PIXELUSDT",
 
-            # Tier 5 (6)
+            # Tier 5 (11)
             "SEI/USD": "SEIUSDT",
             "TIA/USD": "TIAUSDT",
             "STRK/USD": "STRKUSDT",
-            "LTC/USD": "LTCUSDT",
             "BCH/USD": "BCHUSDT",
-            "TON/USD": "TONUSDT",  # ✅ დამატებული
+            "TON/USD": "TONUSDT",
+            "PYTH/USD": "PYTHUSDT",
+            "JTO/USD": "JTOUSDT",
+            "DYM/USD": "DYMUSDT",
+            "ZK/USD": "ZKUSDT",
+            "AEVO/USD": "AEVOUSDT",
         }
 
-        # Yahoo Finance symbols (crypto only) - ✅ 34 COMPLETE
+        # ═══════════════════════════════════════════════════════════
+        # YAHOO FINANCE SYMBOLS (57 კრიპტო)
+        # ═══════════════════════════════════════════════════════════
+
         self.yahoo_symbols = {
-            # Tier 1 (10)
+            # Tier 1 (14)
             "BTC/USD": "BTC-USD",
             "ETH/USD": "ETH-USD",
             "BNB/USD": "BNB-USD",
@@ -223,9 +275,13 @@ class MultiSourceDataProvider:
             "AVAX/USD": "AVAX-USD",
             "LINK/USD": "LINK-USD",
             "MATIC/USD": "MATIC-USD",
-            "DOT/USD": "DOT-USD",  # ✅ დამატებული
+            "DOT/USD": "DOT-USD",
+            "TRX/USD": "TRX-USD",
+            "LTC/USD": "LTC-USD",
+            "XLM/USD": "XLM-USD",
+            "ETC/USD": "ETC-USD",
 
-            # Tier 2 (8)
+            # Tier 2 (13)
             "NEAR/USD": "NEAR-USD",
             "ARB/USD": "ARB-USD",
             "OP/USD": "OP-USD",
@@ -234,36 +290,50 @@ class MultiSourceDataProvider:
             "APT/USD": "APT-USD",
             "UNI/USD": "UNI-USD",
             "ATOM/USD": "ATOM-USD",
+            "FTM/USD": "FTM-USD",
+            "KAS/USD": "KAS-USD",
+            "RUNE/USD": "RUNE-USD",
+            "EGLD/USD": "EGLD-USD",
+            "MINA/USD": "MINA-USD",
 
-            # Tier 3 (5)
+            # Tier 3 (9)
             "DOGE/USD": "DOGE-USD",
             "PEPE/USD": "PEPE-USD",
             "WIF/USD": "WIF-USD",
             "BONK/USD": "BONK-USD",
             "FLOKI/USD": "FLOKI-USD",
+            "BRETT/USD": "BRETT-USD",
+            "POPCAT/USD": "POPCAT-USD",
+            "BOME/USD": "BOME-USD",
+            "MYRO/USD": "MYRO-USD",
 
-            # Tier 4 (5)
+            # Tier 4 (10)
             "RNDR/USD": "RNDR-USD",
             "FET/USD": "FET-USD",
             "AGIX/USD": "AGIX-USD",
             "GALA/USD": "GALA-USD",
             "IMX/USD": "IMX-USD",
+            "ONDO/USD": "ONDO-USD",
+            "CFG/USD": "CFG-USD",
+            "AKT/USD": "AKT-USD",
+            "TAO/USD": "TAO-USD",
+            "PIXEL/USD": "PIXEL-USD",
 
-            # Tier 5 (6)
+            # Tier 5 (11)
             "SEI/USD": "SEI-USD",
             "TIA/USD": "TIA-USD",
             "STRK/USD": "STRK-USD",
-            "LTC/USD": "LTC-USD",
             "BCH/USD": "BCH-USD",
-            "TON/USD": "TON-USD",  # ✅ დამატებული
+            "TON/USD": "TON-USD",
+            "PYTH/USD": "PYTH-USD",
+            "JTO/USD": "JTO-USD",
+            "DYM/USD": "DYM-USD",
+            "ZK/USD": "ZK-USD",
+            "AEVO/USD": "AEVO-USD",
         }
 
     def _is_crypto(self, symbol: str) -> bool:
-        """
-        Detect if symbol is crypto
-        CRITICAL: Must be accurate to avoid wasting API calls
-        """
-        # Explicitly check if in crypto mappings
+        """Detect if symbol is crypto"""
         return symbol in self.coingecko_ids
 
     # ═══════════════════════════════════════════════════════════════
@@ -275,7 +345,6 @@ class MultiSourceDataProvider:
         breaker = self.circuit_breakers[source]
 
         if breaker.status == SourceStatus.CIRCUIT_OPEN:
-            # Check if timeout has passed
             if time.time() - breaker.last_failure_time > self.CIRCUIT_BREAKER_TIMEOUT:
                 logger.info(f"🔄 Circuit breaker reset for {source}")
                 breaker.status = SourceStatus.HEALTHY
@@ -303,7 +372,6 @@ class MultiSourceDataProvider:
         if is_rate_limit:
             self.stats[source]["rate_limits"] += 1
 
-        # Open circuit if threshold exceeded
         if breaker.consecutive_failures >= self.CIRCUIT_BREAKER_THRESHOLD:
             breaker.status = SourceStatus.CIRCUIT_OPEN
             logger.warning(
@@ -317,7 +385,7 @@ class MultiSourceDataProvider:
 
     async def _exponential_backoff(self, attempt: int, source: str):
         """Exponential backoff with jitter"""
-        delay = min(self.BASE_DELAY * (2 ** attempt), 60)  # Max 60s
+        delay = min(self.BASE_DELAY * (2 ** attempt), 60)
         jitter = np.random.uniform(0, 0.1 * delay)
         total_delay = delay + jitter
 
@@ -392,7 +460,9 @@ class MultiSourceDataProvider:
             logger.debug(f"⭕ Circuit open for Binance, skipping {symbol}")
             return None
 
-        binance_symbol = self.binance_symbols.get(symbol, symbol.replace("/", ""))
+        binance_symbol = self.binance_symbols.get(symbol)
+        if not binance_symbol:
+            return None
 
         for attempt in range(self.MAX_RETRIES):
             try:
@@ -445,7 +515,9 @@ class MultiSourceDataProvider:
             logger.debug(f"⭕ Circuit open for Yahoo, skipping {symbol}")
             return None
 
-        yahoo_symbol = self.yahoo_symbols.get(symbol, symbol)
+        yahoo_symbol = self.yahoo_symbols.get(symbol)
+        if not yahoo_symbol:
+            return None
 
         for attempt in range(self.MAX_RETRIES):
             try:
@@ -499,7 +571,7 @@ class MultiSourceDataProvider:
         return None
 
     # ═══════════════════════════════════════════════════════════════
-    # INDICATOR CALCULATION (NaN-SAFE)
+    # INDICATOR CALCULATION
     # ═══════════════════════════════════════════════════════════════
 
     def _calculate_indicators(
@@ -513,7 +585,6 @@ class MultiSourceDataProvider:
             rsi_indicator = RSIIndicator(close_series, window=14)
             rsi_value = rsi_indicator.rsi().iloc[-1]
 
-            # Check for NaN/Inf
             if pd.isna(rsi_value) or not np.isfinite(rsi_value):
                 logger.warning(f"⚠️  Invalid RSI for {symbol}")
                 return None
@@ -548,7 +619,7 @@ class MultiSourceDataProvider:
             return None
 
     # ═══════════════════════════════════════════════════════════════
-    # MAIN FETCH METHOD (Compatible with Trading Engine)
+    # MAIN FETCH METHOD
     # ═══════════════════════════════════════════════════════════════
 
     async def fetch_with_fallback(self, symbol: str) -> Optional[MarketData]:
@@ -556,9 +627,6 @@ class MultiSourceDataProvider:
         🎯 INTELLIGENT FALLBACK CASCADE
 
         Crypto: CoinGecko → Binance → Yahoo
-        Stocks/Commodities: Yahoo ONLY (skip crypto sources)
-
-        Returns MarketData or None
         """
 
         # Check cache
@@ -568,11 +636,10 @@ class MultiSourceDataProvider:
                 logger.debug(f"💾 Cache hit: {symbol}")
                 return cached_data
 
-        # ✅ CRITICAL FIX: Determine source priority based on asset type
+        # All are crypto
         is_crypto = self._is_crypto(symbol)
 
         if is_crypto:
-            # Crypto: Try all sources
             sources = [
                 ("coingecko", self._fetch_coingecko),
                 ("binance", self._fetch_binance),
@@ -580,9 +647,8 @@ class MultiSourceDataProvider:
             ]
             logger.debug(f"🔍 {symbol} identified as CRYPTO")
         else:
-            # Stocks/Commodities: Yahoo ONLY
             sources = [("yahoo", self._fetch_yahoo)]
-            logger.debug(f"🔍 {symbol} identified as STOCK/COMMODITY (Yahoo only)")
+            logger.debug(f"🔍 {symbol} fallback to Yahoo")
 
         # Try each source
         for source_name, fetch_func in sources:
@@ -620,7 +686,7 @@ class MultiSourceDataProvider:
         return None
 
     # ═══════════════════════════════════════════════════════════════
-    # STATISTICS (for Trading Engine compatibility)
+    # STATISTICS
     # ═══════════════════════════════════════════════════════════════
 
     def get_stats(self) -> Dict[str, Any]:
