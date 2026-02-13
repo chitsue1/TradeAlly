@@ -1,0 +1,563 @@
+"""
+═══════════════════════════════════════════════════════════════════════════════
+STRATEGY SUMMARY & COMPARISON - REFACTORED v2.0
+═══════════════════════════════════════════════════════════════════════════════
+
+სრული მიმოხილვა ყველა სტრატეგიის - უნიკალური ნიშები და განსხვავებები
+
+AUTHOR: Trading System Architecture Team
+LAST UPDATE: 2024-02-05
+═══════════════════════════════════════════════════════════════════════════════
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 📊 STRATEGY COMPARISON TABLE
+# ═══════════════════════════════════════════════════════════════════════════
+
+"""
+┌────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
+│   PARAMETER    │  LONG-TERM   │    SWING     │   SCALPING   │  OPPORTUNISTIC   │
+├────────────────┼──────────────┼──────────────┼──────────────┼──────────────────┤
+│ Hold Duration  │  1-3 weeks   │   4-10 days  │  10-60 min   │    1-7 days      │
+│ Confidence Min │     55%      │     55%      │     50%      │       60%        │
+│ RSI Range      │   < 40       │   35-58      │   < 38       │      < 45        │
+│ Primary Filter │   EMA200     │  EMA50/200   │  News+Vol    │   BB Squeeze     │
+│ Stop Loss      │   -8%        │    -7%       │    -5%       │      -8%         │
+│ Target (avg)   │   12-30%     │   10-28%     │    5-12%     │     9-28%        │
+│ Cooldown       │   48 hours   │   96 hours   │   6 hours    │    72 hours      │
+│ News Usage     │   None       │   None       │  PRIMARY     │    OPTIONAL      │
+│ Risk Level     │  LOW-MED     │   MEDIUM     │    HIGH      │      HIGH        │
+└────────────────┴──────────────┴──────────────┴──────────────┴──────────────────┘
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 STRATEGY #1: LONG-TERM INVESTMENT
+# ═══════════════════════════════════════════════════════════════════════════
+
+LONG_TERM_STRATEGY = """
+═══════════════════════════════════════════════════════════════════════════════
+LONG-TERM INVESTMENT STRATEGY
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 NICHE: Structural trends + Deep value accumulation zones
+
+📋 PHILOSOPHY:
+   - Buy structural uptrends at temporary pullbacks
+   - Focus on macro trend (EMA200) not micro movements
+   - Patient entries at oversold zones (RSI < 35 preferred)
+   - 1-3 week holding period
+   - Risk-reward minimum 1:2
+
+🔍 PRIMARY INDICATORS:
+   ✅ EMA200: Primary trend filter (price above or within 5% below)
+   ✅ RSI: Entry timing (< 40, optimal < 30)
+   ✅ Bollinger Bands: Pullback depth measurement (lower 60%)
+
+🔍 SECONDARY INDICATORS:
+   • Volume: Confirmation (not declining)
+   • Multi-TF Alignment: 4H + 1D trends
+   • Support Levels: Dynamic stop placement
+
+📊 ENTRY CONDITIONS:
+   1. Price above EMA200 OR within -5% to +3% (structural support)
+   2. RSI < 40 (pullback condition)
+   3. BB position < 0.65 (lower 65% of range)
+   4. Volume stable or increasing
+   5. Confidence >= 55%
+
+🎯 TARGETS (by tier):
+   • BLUE_CHIP: +12%
+   • HIGH_GROWTH: +18%
+   • MEME: +30%
+   • NARRATIVE: +22%
+   • EMERGING: +25%
+
+🛑 STOP LOSS:
+   • Base: -8%
+   • Adjusted for volatility: -6% to -10%
+   • Placed below nearest support if < 8% away
+
+⏱️ COOLDOWN: 48 hours per symbol
+
+📈 CONFIDENCE CALCULATION:
+   Regime 25% + Technical 30% + Structure 20% + Volume 15% + Multi-TF 10%
+
+🔑 KEY DIFFERENTIATORS:
+   - DEEPEST pullback entries (vs Swing)
+   - LONGEST holds (vs all others)
+   - EMA200 as PRIMARY filter (vs Swing's EMA50)
+   - NO news dependency (pure technical)
+
+💡 BEST FOR:
+   - Accumulation in structural uptrends
+   - Patient traders seeking higher probability setups
+   - Lower-risk entries with wider stops
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 STRATEGY #2: SWING TRADING
+# ═══════════════════════════════════════════════════════════════════════════
+
+SWING_STRATEGY = """
+═══════════════════════════════════════════════════════════════════════════════
+SWING TRADING STRATEGY
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 NICHE: Trend continuation + Multi-timeframe momentum alignment
+
+📋 PHILOSOPHY:
+   - Ride established trends with optimal entry timing
+   - EMA50/EMA200 crossover as primary trend confirmation
+   - MACD + RSI for momentum validation
+   - 4-10 day holding period
+   - Medium risk, medium-high reward
+
+🔍 PRIMARY INDICATORS:
+   ✅ EMA50 > EMA200: Golden cross (uptrend confirmation)
+   ✅ MACD Histogram: Momentum direction
+   ✅ RSI: Entry timing (35-58 range, optimal 40-52)
+
+🔍 SECONDARY INDICATORS:
+   • Volume: Trend confirmation (increasing on rallies)
+   • Multi-TF Alignment: 4H + 1D both bullish/neutral
+   • Support/Resistance: Risk management
+
+📊 ENTRY CONDITIONS:
+   1. EMA50 > EMA200 (golden cross, gap >= 0.5%)
+   2. Price above EMA200 OR within -5% of EMA50 (healthy pullback)
+   3. RSI 35-58 (momentum zone, not oversold, not overbought)
+   4. MACD histogram positive OR turning positive
+   5. Multi-TF: 4H and 1D NOT bearish
+   6. Volume stable or increasing
+   7. Confidence >= 55%
+
+🎯 TARGETS (by tier):
+   • BLUE_CHIP: +10%
+   • HIGH_GROWTH: +16%
+   • MEME: +28%
+   • NARRATIVE: +20%
+   • EMERGING: +22%
+
+🛑 STOP LOSS:
+   • Base: -7%
+   • Adjusted for volatility: -5.5% to -9%
+   • Placed below nearest support if strong and close
+
+⏱️ COOLDOWN: 96 hours (4 days) per symbol
+
+📈 CONFIDENCE CALCULATION:
+   Regime 25% + Technical 30% + Structure 20% + Volume 15% + Multi-TF 10%
+
+🔑 KEY DIFFERENTIATORS:
+   - GOLDEN CROSS required (vs Long-Term's single EMA200)
+   - MACD histogram as core filter (unique to Swing)
+   - HEALTHIER RSI range: 35-58 (vs Long-Term's < 40)
+   - TREND CONTINUATION focus (not deep value)
+   - 4-day cooldown (longest among all strategies)
+
+💡 BEST FOR:
+   - Riding established trends
+   - Catching momentum shifts
+   - Balanced risk/reward
+   - Traders wanting trend confirmation before entry
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 STRATEGY #3: SCALPING
+# ═══════════════════════════════════════════════════════════════════════════
+
+SCALPING_STRATEGY = """
+═══════════════════════════════════════════════════════════════════════════════
+SCALPING STRATEGY
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 NICHE: News-driven volatility + Ultra-short momentum bursts
+
+📋 PHILOSOPHY:
+   - Capitalize on 1-hour volatility spikes
+   - News sentiment as PRIMARY market direction filter
+   - Technical oversold as ENTRY trigger
+   - 10-60 minute holding period (auto-exit at 60min)
+   - Quick profits (5-12%), tight stops (-4 to -6%)
+
+🔍 PRIMARY INDICATORS:
+   ✅ NEWS SENTIMENT: Bullish keywords (partnership, integration, mainnet, burn)
+      • Bearish keywords BLOCK signal immediately
+   ✅ RSI < 38: Oversold entry
+   ✅ 1H Volatility: > 60th percentile
+
+🔍 SECONDARY INDICATORS:
+   • Volume Surge: > 1.2x average (MANDATORY)
+   • BB Position: < 0.55 (lower half)
+   • Multi-TF Momentum: 1H + 4H alignment
+
+📊 ENTRY CONDITIONS:
+   1. [OPTIONAL] Bullish news within last 3 hours
+   2. [MANDATORY] Volatility > 60th percentile
+   3. [MANDATORY] RSI < 38
+   4. [MANDATORY] Volume surge > 1.2x average
+   5. BB position < 0.55
+   6. Confidence >= 50%
+
+🎯 TARGETS (by tier, with news boost):
+   • BLUE_CHIP: +5-6%
+   • HIGH_GROWTH: +8-10%
+   • MEME: +12-14%
+   • NARRATIVE: +9-11%
+   • EMERGING: +10-12%
+
+🛑 STOP LOSS:
+   • Base: -5% (TIGHTEST of all strategies)
+   • Adjusted for volatility: -4% to -6%
+   • With news: -4.5% (slightly tighter)
+
+⏰ AUTO-EXIT: 60 minutes (enforced time stop)
+
+⏱️ COOLDOWN: 6 hours per symbol
+
+📈 CONFIDENCE CALCULATION:
+   IF news: Regime 25% + Technical 30% + Structure 20% + Volume 15% + News 10%
+   ELSE: Pure technical confidence
+
+🔑 KEY DIFFERENTIATORS:
+   - ONLY strategy with news as PRIMARY filter
+   - SHORTEST holds: 10-60 minutes
+   - TIGHTEST stops: -5% (vs -7% to -8% for others)
+   - AUTO-EXIT after 60 minutes (unique)
+   - NEWS BLOCKS bearish keywords immediately
+   - HIGHEST volume requirement: 1.2x minimum
+
+💡 BEST FOR:
+   - News-reactive trading
+   - Quick profits from volatility spikes
+   - Active traders monitoring 1H charts
+   - High-frequency signal generation (6H cooldown)
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 STRATEGY #4: OPPORTUNISTIC
+# ═══════════════════════════════════════════════════════════════════════════
+
+OPPORTUNISTIC_STRATEGY = """
+═══════════════════════════════════════════════════════════════════════════════
+OPPORTUNISTIC STRATEGY
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 NICHE: Multi-timeframe breakouts + Bollinger Band squeeze patterns
+
+📋 PHILOSOPHY:
+   - Capture explosive moves after consolidation periods
+   - BB squeeze detection (low volatility → high volatility transition)
+   - RSI divergence patterns (hidden strength)
+   - Volume surge confirmation
+   - 1-7 day holding period
+   - High risk, high reward
+
+🔍 PRIMARY INDICATORS:
+   ✅ BB SQUEEZE: Bollinger width < 70% of 20-day average
+      • Detects consolidation before breakout
+   ✅ RSI DIVERGENCE: Price lower low, RSI higher low (bullish)
+   ✅ VOLUME BREAKOUT: > 1.8x average (MANDATORY)
+
+🔍 SECONDARY INDICATORS:
+   • RSI < 45 (entry zone)
+   • Multi-TF Momentum: 1H + 4H improving
+   • News: OPTIONAL catalyst (adds confidence boost)
+
+📊 ENTRY CONDITIONS:
+   1. [PREFERRED] BB squeeze OR RSI divergence (at least ONE pattern)
+   2. [MANDATORY] Volume surge > 1.8x average
+   3. [MANDATORY] RSI < 45
+   4. [PREFERRED] Multi-TF alignment improving
+   5. [OPTIONAL] Positive news catalyst (adds +15% confidence)
+   6. Negative news BLOCKS immediately
+   7. Confidence >= 60%
+
+🔍 PATTERN DETECTION:
+
+   BB SQUEEZE:
+   - Width < 70% of average = squeeze
+   - Width < 50% = strong squeeze (score 40+)
+   - Width < 30% = extreme squeeze (score 80+)
+
+   RSI DIVERGENCE:
+   - Price makes lower low, RSI makes higher low
+   - Score based on price drop % and RSI rise
+   - Strong divergence: price -5%+, RSI +5 points
+
+🎯 TARGETS (by tier):
+   • BLUE_CHIP: +9%
+   • HIGH_GROWTH: +16%
+   • MEME: +28%
+   • NARRATIVE: +19%
+   • EMERGING: +22%
+
+🛑 STOP LOSS:
+   • Base: -8%
+   • Adjusted for volatility: -6.5% to -10%
+   • Tighter if extreme squeeze: -7%
+
+⏱️ COOLDOWN: 72 hours (3 days) per symbol
+
+📈 CONFIDENCE CALCULATION:
+   Regime 25% + Technical 30% + Structure 20% + Volume 15% + Multi-TF 10%
+   + News boost (if present): +15%
+
+🔑 KEY DIFFERENTIATORS:
+   - ONLY strategy detecting BB squeeze patterns
+   - ONLY strategy detecting RSI divergence
+   - PATTERN REQUIREMENT: Must have squeeze OR divergence
+   - HIGHEST volume requirement: 1.8x (vs 1.2x for Scalping)
+   - HIGHEST confidence threshold: 60% (most selective)
+   - NEWS is optional catalyst (vs Scalping's primary filter)
+
+💡 BEST FOR:
+   - Breakout trading
+   - Consolidation-to-expansion plays
+   - Catching explosive moves
+   - Traders willing to wait for high-conviction setups
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 📊 TECHNICAL INDICATOR USAGE MATRIX
+# ═══════════════════════════════════════════════════════════════════════════
+
+INDICATOR_USAGE = """
+═══════════════════════════════════════════════════════════════════════════════
+INDICATOR USAGE ACROSS STRATEGIES
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
+│   INDICATOR     │  LONG-TERM   │    SWING     │   SCALPING   │  OPPORTUNISTIC   │
+├─────────────────┼──────────────┼──────────────┼──────────────┼──────────────────┤
+│ EMA200          │  ✅ PRIMARY  │  ✅ FILTER   │      -       │        -         │
+│ EMA50           │      -       │  ✅ PRIMARY  │      -       │        -         │
+│ RSI             │  ✅ PRIMARY  │  ✅ PRIMARY  │  ✅ PRIMARY  │   ✅ PRIMARY     │
+│ BB Position     │  ✅ SECOND   │      -       │  ✅ SECOND   │        -         │
+│ BB Squeeze      │      -       │      -       │      -       │   ✅ PRIMARY     │
+│ MACD            │      -       │  ✅ PRIMARY  │      -       │        -         │
+│ Volume Surge    │  ✅ SECOND   │  ✅ SECOND   │  ✅ MANDAT.  │   ✅ MANDATORY   │
+│ News Sentiment  │      ❌      │      ❌      │  ✅ PRIMARY  │   ✅ OPTIONAL    │
+│ RSI Divergence  │      -       │      -       │      -       │   ✅ PRIMARY     │
+│ Multi-TF        │  ✅ BONUS    │  ✅ FILTER   │  ✅ BONUS    │   ✅ BONUS       │
+│ Support/Resist  │  ✅ STOP     │  ✅ STOP     │      -       │   ✅ BONUS       │
+└─────────────────┴──────────────┴──────────────┴──────────────┴──────────────────┘
+
+Legend:
+✅ PRIMARY  = Core decision factor
+✅ FILTER   = Hard requirement (blocks if fails)
+✅ MANDAT.  = Mandatory but not primary
+✅ SECOND   = Secondary confirmation
+✅ STOP     = Used for stop placement
+✅ BONUS    = Adds confidence points
+❌          = Not used
+-           = Not applicable
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 STRATEGY SELECTION GUIDE
+# ═══════════════════════════════════════════════════════════════════════════
+
+SELECTION_GUIDE = """
+═══════════════════════════════════════════════════════════════════════════════
+WHEN TO USE WHICH STRATEGY?
+═══════════════════════════════════════════════════════════════════════════════
+
+🔍 USE LONG-TERM WHEN:
+   ✅ Strong structural uptrend (EMA200)
+   ✅ Deep pullback (RSI < 35)
+   ✅ Willing to hold 1-3 weeks
+   ✅ Want lower risk with wider stops
+   ✅ Patient for high-probability setup
+
+   ❌ AVOID IF:
+   • Downtrend or ranging market
+   • Need quick profits
+   • RSI > 40 (wait for deeper pullback)
+
+───────────────────────────────────────────────────────────────────────────────
+
+🔍 USE SWING WHEN:
+   ✅ Golden cross confirmed (EMA50 > EMA200)
+   ✅ Healthy pullback (RSI 40-52)
+   ✅ MACD turning bullish
+   ✅ Want to ride trend continuation
+   ✅ 4-10 day holding period acceptable
+
+   ❌ AVOID IF:
+   • No golden cross
+   • RSI oversold (<35) or overbought (>58)
+   • MACD bearish
+
+───────────────────────────────────────────────────────────────────────────────
+
+🔍 USE SCALPING WHEN:
+   ✅ Breaking news detected (bullish keywords)
+   ✅ High volatility spike (>60th percentile)
+   ✅ Volume surge (>1.2x)
+   ✅ Can monitor trade actively (60min auto-exit)
+   ✅ Want quick 5-12% gains
+
+   ❌ AVOID IF:
+   • No news or bearish news
+   • Low volatility
+   • Cannot monitor actively
+   • Risk-averse (tight stops)
+
+───────────────────────────────────────────────────────────────────────────────
+
+🔍 USE OPPORTUNISTIC WHEN:
+   ✅ BB squeeze detected (consolidation)
+   ✅ RSI divergence pattern
+   ✅ Volume breakout (>1.8x)
+   ✅ Want to catch explosive breakouts
+   ✅ High-conviction setups only (60% threshold)
+
+   ❌ AVOID IF:
+   • No pattern (squeeze or divergence)
+   • Low volume
+   • Need frequent signals (72h cooldown)
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 📈 PERFORMANCE OPTIMIZATION TIPS
+# ═══════════════════════════════════════════════════════════════════════════
+
+OPTIMIZATION_TIPS = """
+═══════════════════════════════════════════════════════════════════════════════
+STRATEGY OPTIMIZATION RECOMMENDATIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 LONG-TERM STRATEGY:
+   • Monitor EMA200 bounces closely
+   • Use weekly charts for trend confirmation
+   • Consider scaling in at multiple RSI levels (30, 25, 20)
+   • Place stops below nearest support, not just -8%
+   • Track regime changes - exit if trend breaks
+
+🎯 SWING STRATEGY:
+   • Watch for MACD histogram expansion
+   • Exit early if golden cross weakens (EMA50 approaching EMA200)
+   • Use 4H charts for entry timing
+   • Monitor volume - declining volume = exit signal
+   • Trailing stops recommended after +8% profit
+
+🎯 SCALPING STRATEGY:
+   • Set alerts for news (CoinTelegraph, CryptoPanic APIs)
+   • Use 1-minute or 5-minute charts for precise entry
+   • ALWAYS respect 60-minute auto-exit
+   • Consider partial exits at +5%, +8% (tier dependent)
+   • Avoid during low liquidity hours (3-7 AM UTC)
+
+🎯 OPPORTUNISTIC STRATEGY:
+   • BB squeeze can last days - be patient
+   • Watch for volume expansion as squeeze releases
+   • RSI divergence confirmation may need 2-3 candlesticks
+   • Consider entering 50% position on squeeze, 50% on breakout
+   • Exit if pattern fails (no breakout after 48 hours)
+
+═══════════════════════════════════════════════════════════════════════════════
+GENERAL OPTIMIZATION:
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Risk Management:
+   • Never risk more than 2% of capital per trade
+   • Size positions based on stop distance
+   • Diversify across strategies (not just one)
+   • Track win rate per strategy per tier
+
+✅ Analytics Tracking:
+   • Record every signal (entry, target, stop, confidence)
+   • Monitor strategy performance weekly
+   • Adjust confidence thresholds based on win rate
+   • Disable underperforming strategies temporarily
+
+✅ Market Conditions:
+   • Bull market: Long-Term + Swing perform best
+   • Bear market: Scalping + Opportunistic (short timeframes)
+   • Ranging market: Opportunistic (BB squeeze setups)
+   • High volatility: Scalping excels
+
+✅ Combining Strategies:
+   • Long-Term + Swing = complementary (different entry depths)
+   • Scalping + Opportunistic = both high risk, limit exposure
+   • Run all 4 but cap total open positions (e.g., max 10)
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🔧 TROUBLESHOOTING
+# ═══════════════════════════════════════════════════════════════════════════
+
+TROUBLESHOOTING = """
+═══════════════════════════════════════════════════════════════════════════════
+COMMON ISSUES & SOLUTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ ISSUE: Too few signals generated
+
+   LONG-TERM:
+   • RSI < 40 filter may be too strict in ranging markets
+   • Solution: Test RSI < 45 threshold
+   • Or: Reduce confidence from 55% to 50%
+
+   SWING:
+   • Golden cross requirement too strict
+   • Solution: Allow EMA50 within 0.3% of EMA200
+   • Or: Relax RSI range to 30-60
+
+   SCALPING:
+   • News dependency limiting signals
+   • Solution: Make news fully optional (remove bearish block)
+   • Or: Reduce volume requirement to 1.0x
+
+   OPPORTUNISTIC:
+   • Pattern requirements too strict
+   • Solution: Allow signal if volume > 2.5x even without pattern
+   • Or: Lower confidence to 55%
+
+───────────────────────────────────────────────────────────────────────────────
+
+❌ ISSUE: Too many false signals (low win rate)
+
+   ALL STRATEGIES:
+   • Raise confidence thresholds by 5-10%
+   • Tighten RSI requirements
+   • Add multi-TF filter (all TFs must align)
+   • Increase cooldown periods
+
+   SCALPING:
+   • News may be misleading
+   • Solution: Require BOTH news AND volume > 2x
+   • Or: Add minimum news recency (< 1 hour)
+
+   OPPORTUNISTIC:
+   • BB squeeze alone not enough
+   • Solution: Require BOTH squeeze AND divergence
+   • Or: Require volume > 2.5x
+
+───────────────────────────────────────────────────────────────────────────────
+
+❌ ISSUE: Stops hit too frequently
+
+   ALL STRATEGIES:
+   • Volatility-adjusted stops may be too tight
+   • Solution: Increase base stop by 1-2%
+   • Or: Use ATR-based stops instead of fixed %
+
+   SCALPING:
+   • 5% stop too tight for volatile assets
+   • Solution: Use 6% for MEME tier, 5% for others
+
+───────────────────────────────────────────────────────────────────────────────
+
+❌ ISSUE: Targets not reached (premature exits)
+
+   • May be over-optimistic targets
+   • Solution: Reduce targets by 20% across board
+   • Or: Use trailing stops instead of fixed targets
+   • Or: Partial exits (50% at 60% of target, rest at full target)
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# END OF STRATEGY SUMMARY
+# ═══════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,11 @@
+python-telegram-bot==20.7
+aiohttp==3.9.1
+pandas==2.1.4
+ta==0.11.0
+PyPDF2==3.0.1
+feedparser==6.0.11
+twelvedata>=1.2.10
+numpy>=1.24.0
+python-dateutil==2.8.2
+anthropic
+telegram

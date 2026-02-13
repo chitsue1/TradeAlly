@@ -1,0 +1,10 @@
+{
+  "BTC/USD": {
+    "symbol": "BTC/USD",
+    "entry_price": 75036.09,
+    "strategy_type": "scalping",
+    "signal_id": 1,
+    "entry_time": "2026-02-03T19:41:02.503616",
+    "buy_signals_sent": 1
+  }
+}
