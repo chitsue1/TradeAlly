@@ -34,10 +34,11 @@ args = "Market Analyzer AI"
 [[workflows.workflow]]
 name = "Market Analyzer AI"
 author = "agent"
+mode = "parallel"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python main.py"
+task = "workflow.run"
+args = "Market Analyzer AI"
 
 [workflows.workflow.metadata]
 outputType = "console"
