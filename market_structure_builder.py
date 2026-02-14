@@ -1,434 +1,241 @@
 """
-═══════════════════════════════════════════════════════════════════════════════
-MARKET STRUCTURE BUILDER - PRODUCTION v1.0
-═══════════════════════════════════════════════════════════════════════════════
-
-PURPOSE: Build MarketStructure objects for strategies
-
-FEATURES:
-✅ Support/Resistance detection (simplified but effective)
-✅ Volume trend analysis
-✅ Momentum scoring
-✅ Trend strength calculation
-✅ Multi-timeframe simulation (1H, 4H, 1D)
-✅ Volatility regime classification
-
-AUTHOR: Trading System Architecture Team
-CREATED: 2024-02-08
+Market Structure Builder - PHASE 1 ENHANCED VERSION
+Calculates support/resistance levels with strength metrics
 """
 
-import logging
 import numpy as np
-from typing import Dict, Optional, Tuple
+import logging
 from dataclasses import dataclass
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# MARKET STRUCTURE DATACLASS (imported by strategies)
-# ═══════════════════════════════════════════════════════════════════════════
-
 @dataclass
 class MarketStructure:
-    """Market structure analysis for strategies"""
-
-    # Price levels
     nearest_support: float
     nearest_resistance: float
-    support_strength: float  # 0-100
-    resistance_strength: float  # 0-100
+    support_strength: int
+    resistance_strength: int
+    volume_trend: str
+    volume_momentum: float
+    structure_quality: float
+    support_distance_pct: float
+    resistance_distance_pct: float
+    pivot_point: float
+    midpoint: float
 
-    # Volume analysis
-    volume_trend: str  # "increasing", "decreasing", "stable"
-    volume_percentile: float  # Current volume vs 20-day average
-
-    # Momentum
-    momentum_score: float  # -100 to +100
-    trend_strength: float  # 0-100
-
-    # Volatility
-    volatility_regime: str  # "low", "normal", "high", "extreme"
-    volatility_percentile: float
-
-    # Multi-timeframe alignment
-    tf_1h_trend: str  # "bullish", "bearish", "neutral"
-    tf_4h_trend: str
-    tf_1d_trend: str
-    alignment_score: float  # 0-100
-
-# ═══════════════════════════════════════════════════════════════════════════
-# MARKET STRUCTURE BUILDER
-# ═══════════════════════════════════════════════════════════════════════════
 
 class MarketStructureBuilder:
-    """
-    Build MarketStructure from price and technical data
-
-    ✅ Lightweight implementation - no heavy computation
-    ✅ Uses existing indicators from market_data
-    """
-
     def __init__(self):
-        self.support_resistance_cache = {}  # Cache S/R levels
-        logger.info("✅ MarketStructureBuilder initialized")
+        logger.info("✅ MarketStructureBuilder initialized (Phase 1 Enhanced)")
+        self.price_cache = {}
 
     def build(
         self,
         symbol: str,
-        price: float,
-        technical_data: Dict,
-        regime_analysis: Optional[object] = None
+        current_price: float,
+        market_data: Dict,
+        market_regime,
+        price_history: List[float] = None
     ) -> MarketStructure:
-        """
-        Build MarketStructure from available data
 
-        Args:
-            symbol: Trading symbol
-            price: Current price
-            technical_data: Dict with all indicators from market_data
-            regime_analysis: Market regime object (optional)
+        if price_history is None:
+            price_history = self.price_cache.get(symbol, [current_price] * 200)
+        else:
+            self.price_cache[symbol] = price_history
 
-        Returns:
-            MarketStructure object
-        """
+        # Find support levels
+        support_levels, support_strengths = self._find_support_levels(price_history, current_price)
+        nearest_support = support_levels[0] if support_levels else current_price * 0.97
+        support_strength_count = support_strengths[0] if support_strengths else 1
 
-        # ════════════════════════════════════════════════════════════════════
-        # 1. SUPPORT/RESISTANCE DETECTION (simplified)
-        # ════════════════════════════════════════════════════════════════════
+        # Find resistance levels
+        resistance_levels, resistance_strengths = self._find_resistance_levels(price_history, current_price)
+        nearest_resistance = resistance_levels[0] if resistance_levels else current_price * 1.03
+        resistance_strength_count = resistance_strengths[0] if resistance_strengths else 1
 
-        support, resistance, support_strength, resistance_strength = (
-            self._detect_support_resistance(
-                symbol=symbol,
-                price=price,
-                ema50=technical_data.get('ema50', price),
-                ema200=technical_data.get('ema200', price),
-                bb_low=technical_data.get('bb_low', price * 0.95),
-                bb_high=technical_data.get('bb_high', price * 1.05),
-                bb_mid=technical_data.get('bb_mid', price)
-            )
+        # Calculate distances
+        support_distance_pct = ((current_price - nearest_support) / current_price) * 100
+        resistance_distance_pct = ((nearest_resistance - current_price) / current_price) * 100
+
+        # Analyze volume
+        volume_trend, volume_momentum = self._analyze_volume_trend(market_data)
+
+        # Calculate quality
+        quality_score = self._calculate_structure_quality(
+            support_strength_count,
+            resistance_strength_count,
+            support_distance_pct,
+            resistance_distance_pct,
+            volume_momentum,
+            market_regime
         )
 
-        # ════════════════════════════════════════════════════════════════════
-        # 2. VOLUME ANALYSIS
-        # ════════════════════════════════════════════════════════════════════
+        # Calculate pivots
+        pivot_point = (nearest_support + nearest_resistance) / 2
+        midpoint = (nearest_support + current_price + nearest_resistance) / 3
 
-        volume = technical_data.get('volume', 1000000)
-        avg_volume = technical_data.get('avg_volume_20d', volume)
-
-        volume_trend, volume_percentile = self._analyze_volume(
-            current_volume=volume,
-            avg_volume=avg_volume
-        )
-
-        # ════════════════════════════════════════════════════════════════════
-        # 3. MOMENTUM SCORE
-        # ════════════════════════════════════════════════════════════════════
-
-        momentum_score = self._calculate_momentum(
-            price=price,
-            prev_close=technical_data.get('prev_close', price),
-            ema50=technical_data.get('ema50', price),
-            rsi=technical_data.get('rsi', 50),
-            macd_histogram=technical_data.get('macd_histogram', 0)
-        )
-
-        # ════════════════════════════════════════════════════════════════════
-        # 4. TREND STRENGTH
-        # ════════════════════════════════════════════════════════════════════
-
-        trend_strength = self._calculate_trend_strength(
-            price=price,
-            ema50=technical_data.get('ema50', price),
-            ema200=technical_data.get('ema200', price),
-            rsi=technical_data.get('rsi', 50)
-        )
-
-        # ════════════════════════════════════════════════════════════════════
-        # 5. VOLATILITY REGIME
-        # ════════════════════════════════════════════════════════════════════
-
-        volatility_regime = "normal"
-        volatility_percentile = 50.0
-
-        if regime_analysis:
-            volatility_percentile = regime_analysis.volatility_percentile
-
-            if volatility_percentile > 85:
-                volatility_regime = "extreme"
-            elif volatility_percentile > 70:
-                volatility_regime = "high"
-            elif volatility_percentile < 30:
-                volatility_regime = "low"
-
-        # ════════════════════════════════════════════════════════════════════
-        # 6. MULTI-TIMEFRAME SIMULATION
-        # ════════════════════════════════════════════════════════════════════
-
-        tf_1h, tf_4h, tf_1d, alignment_score = self._simulate_multi_timeframe(
-            price=price,
-            ema50=technical_data.get('ema50', price),
-            ema200=technical_data.get('ema200', price),
-            rsi=technical_data.get('rsi', 50),
-            macd_histogram=technical_data.get('macd_histogram', 0)
-        )
-
-        # ════════════════════════════════════════════════════════════════════
-        # 7. BUILD MARKET STRUCTURE
-        # ════════════════════════════════════════════════════════════════════
-
-        market_structure = MarketStructure(
-            nearest_support=support,
-            nearest_resistance=resistance,
-            support_strength=support_strength,
-            resistance_strength=resistance_strength,
+        structure = MarketStructure(
+            nearest_support=round(nearest_support, 4),
+            nearest_resistance=round(nearest_resistance, 4),
+            support_strength=int(support_strength_count),
+            resistance_strength=int(resistance_strength_count),
             volume_trend=volume_trend,
-            volume_percentile=volume_percentile,
-            momentum_score=momentum_score,
-            trend_strength=trend_strength,
-            volatility_regime=volatility_regime,
-            volatility_percentile=volatility_percentile,
-            tf_1h_trend=tf_1h,
-            tf_4h_trend=tf_4h,
-            tf_1d_trend=tf_1d,
-            alignment_score=alignment_score
+            volume_momentum=round(volume_momentum, 1),
+            structure_quality=round(quality_score, 1),
+            support_distance_pct=round(support_distance_pct, 2),
+            resistance_distance_pct=round(resistance_distance_pct, 2),
+            pivot_point=round(pivot_point, 4),
+            midpoint=round(midpoint, 4)
         )
 
-        logger.debug(
-            f"📊 MarketStructure {symbol}: "
-            f"S/R: ${support:.4f}/${resistance:.4f} | "
-            f"Trend: {trend_strength:.0f} | "
-            f"TF: {tf_1h}/{tf_4h}/{tf_1d}"
+        logger.info(
+            f"✅ {symbol} Structure: "
+            f"Support ${nearest_support:.4f}(x{int(support_strength_count)}), "
+            f"Resistance ${nearest_resistance:.4f}(x{int(resistance_strength_count)}), "
+            f"Quality {quality_score:.0f}/100"
         )
 
-        return market_structure
+        return structure
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # HELPER METHODS
-    # ═══════════════════════════════════════════════════════════════════════
-
-    def _detect_support_resistance(
+    def _find_support_levels(
         self,
-        symbol: str,
-        price: float,
-        ema50: float,
-        ema200: float,
-        bb_low: float,
-        bb_high: float,
-        bb_mid: float
-    ) -> Tuple[float, float, float, float]:
-        """
-        Detect nearest support and resistance levels
+        price_history: List[float],
+        current_price: float,
+        lookback: int = 100
+    ) -> Tuple[List[float], List[int]]:
 
-        Method: Use EMA levels + Bollinger Bands as dynamic S/R
+        if not price_history or len(price_history) < 10:
+            return [current_price * 0.97], [1]
 
-        Returns:
-            (support, resistance, support_strength, resistance_strength)
-        """
+        recent = price_history[-lookback:]
+        supports = []
 
-        # Possible support levels
-        support_candidates = []
+        # Find local minima
+        for i in range(1, len(recent) - 1):
+            if recent[i] < recent[i-1] and recent[i] < recent[i+1]:
+                level = recent[i]
+                if level < current_price * 0.99:
+                    supports.append(level)
 
-        if ema200 < price:
-            support_candidates.append((ema200, 80.0))  # EMA200 below = strong support
-
-        if ema50 < price:
-            support_candidates.append((ema50, 60.0))  # EMA50 below = medium support
-
-        support_candidates.append((bb_low, 50.0))  # BB lower band
-
-        # Nearest support
-        if support_candidates:
-            support_candidates.sort(key=lambda x: abs(price - x[0]))
-            nearest_support, support_strength = support_candidates[0]
+        if not supports:
+            supports = [
+                current_price * 0.98,
+                current_price * 0.95,
+                current_price * 0.90
+            ]
         else:
-            nearest_support = price * 0.95  # Default: 5% below
-            support_strength = 30.0
+            supports = list(set([round(s, 2) for s in supports]))
+            supports = sorted(supports, key=lambda x: current_price - x)
+            supports = supports[:3]
 
-        # Possible resistance levels
-        resistance_candidates = []
+        strengths = []
+        for support in supports:
+            tolerance = support * 0.01
+            touches = sum(1 for p in price_history if abs(p - support) <= tolerance)
+            strengths.append(max(touches, 1))
 
-        if ema200 > price:
-            resistance_candidates.append((ema200, 80.0))  # EMA200 above = strong resistance
+        return supports, strengths
 
-        if ema50 > price:
-            resistance_candidates.append((ema50, 60.0))  # EMA50 above = medium resistance
-
-        resistance_candidates.append((bb_high, 50.0))  # BB upper band
-
-        # Nearest resistance
-        if resistance_candidates:
-            resistance_candidates.sort(key=lambda x: abs(price - x[0]))
-            nearest_resistance, resistance_strength = resistance_candidates[0]
-        else:
-            nearest_resistance = price * 1.05  # Default: 5% above
-            resistance_strength = 30.0
-
-        return nearest_support, nearest_resistance, support_strength, resistance_strength
-
-    def _analyze_volume(
+    def _find_resistance_levels(
         self,
-        current_volume: float,
-        avg_volume: float
-    ) -> Tuple[str, float]:
-        """
-        Analyze volume trend
+        price_history: List[float],
+        current_price: float,
+        lookback: int = 100
+    ) -> Tuple[List[float], List[int]]:
 
-        Returns:
-            (trend: str, percentile: float)
-        """
+        if not price_history or len(price_history) < 10:
+            return [current_price * 1.03], [1]
 
-        if avg_volume == 0:
-            return "stable", 50.0
+        recent = price_history[-lookback:]
+        resistances = []
 
-        volume_ratio = current_volume / avg_volume
+        # Find local maxima
+        for i in range(1, len(recent) - 1):
+            if recent[i] > recent[i-1] and recent[i] > recent[i+1]:
+                level = recent[i]
+                if level > current_price * 1.01:
+                    resistances.append(level)
 
-        # Classify trend
-        if volume_ratio > 1.3:
-            trend = "increasing"
-        elif volume_ratio < 0.7:
-            trend = "decreasing"
+        if not resistances:
+            resistances = [
+                current_price * 1.02,
+                current_price * 1.05,
+                current_price * 1.10
+            ]
         else:
-            trend = "stable"
+            resistances = list(set([round(r, 2) for r in resistances]))
+            resistances = sorted(resistances, key=lambda x: x - current_price)
+            resistances = resistances[:3]
 
-        # Calculate percentile
-        if volume_ratio > 2.5:
-            percentile = 95.0
-        elif volume_ratio > 2.0:
-            percentile = 90.0
-        elif volume_ratio > 1.5:
-            percentile = 80.0
-        elif volume_ratio > 1.2:
-            percentile = 70.0
-        elif volume_ratio > 0.8:
-            percentile = 50.0
-        elif volume_ratio > 0.5:
-            percentile = 30.0
+        strengths = []
+        for resistance in resistances:
+            tolerance = resistance * 0.01
+            touches = sum(1 for p in price_history if abs(p - resistance) <= tolerance)
+            strengths.append(max(touches, 1))
+
+        return resistances, strengths
+
+    def _analyze_volume_trend(self, market_data: Dict) -> Tuple[str, float]:
+
+        volume = market_data.get('volume', 1)
+        avg_volume = market_data.get('avg_volume_20d', 1)
+
+        if volume == 0 or avg_volume == 0:
+            return 'neutral', 0
+
+        momentum = ((volume - avg_volume) / avg_volume) * 100
+
+        if volume > avg_volume * 1.3:
+            return 'increasing', min(momentum, 100)
+        elif volume < avg_volume * 0.7:
+            return 'decreasing', max(momentum, -100)
         else:
-            percentile = 10.0
+            return 'neutral', momentum
 
-        return trend, percentile
-
-    def _calculate_momentum(
+    def _calculate_structure_quality(
         self,
-        price: float,
-        prev_close: float,
-        ema50: float,
-        rsi: float,
-        macd_histogram: float
+        support_strength: int,
+        resistance_strength: int,
+        support_distance_pct: float,
+        resistance_distance_pct: float,
+        volume_momentum: float,
+        market_regime
     ) -> float:
-        """
-        Calculate momentum score (-100 to +100)
 
-        Combines:
-        - Price change
-        - RSI momentum
-        - MACD histogram
-        """
+        score = 50
 
-        score = 0.0
+        total_strength = support_strength + resistance_strength
+        strength_bonus = min(total_strength * 2, 25)
+        score += strength_bonus
 
-        # Price change momentum (±30 points)
-        if prev_close > 0:
-            price_change_pct = ((price - prev_close) / prev_close) * 100
-            score += np.clip(price_change_pct * 10, -30, 30)
+        distance_diff = abs(support_distance_pct - resistance_distance_pct)
+        if distance_diff < 0.5:
+            score += 15
+        elif distance_diff < 1.0:
+            score += 12
+        elif distance_diff < 2.0:
+            score += 8
+        elif distance_diff < 3.0:
+            score += 4
 
-        # RSI momentum (±40 points)
-        rsi_momentum = (rsi - 50) * 0.8  # -40 to +40
-        score += rsi_momentum
+        if volume_momentum > 50:
+            score += 15
+        elif volume_momentum > 20:
+            score += 10
+        elif volume_momentum > 0:
+            score += 5
 
-        # MACD histogram (±30 points)
-        macd_contribution = np.clip(macd_histogram * 1000, -30, 30)
-        score += macd_contribution
+        try:
+            if hasattr(market_regime, 'regime'):
+                regime_str = str(market_regime.regime).lower()
+                if 'strong' in regime_str and 'uptrend' in regime_str:
+                    score += 10
+                elif 'uptrend' in regime_str:
+                    score += 7
+                elif 'downtrend' in regime_str:
+                    score += 5
+        except:
+            pass
 
-        return np.clip(score, -100, 100)
-
-    def _calculate_trend_strength(
-        self,
-        price: float,
-        ema50: float,
-        ema200: float,
-        rsi: float
-    ) -> float:
-        """
-        Calculate trend strength (0-100)
-
-        100 = very strong uptrend
-        0 = very strong downtrend
-        50 = neutral/ranging
-        """
-
-        score = 50.0  # Start neutral
-
-        # EMA positioning (±30 points)
-        if ema50 > ema200:
-            ema_gap = (ema50 - ema200) / ema200
-            score += min(ema_gap * 500, 30)  # Up to +30
-        else:
-            ema_gap = (ema200 - ema50) / ema200
-            score -= min(ema_gap * 500, 30)  # Up to -30
-
-        # Price vs EMA50 (±20 points)
-        if ema50 > 0:
-            price_vs_ema50 = (price - ema50) / ema50
-            score += np.clip(price_vs_ema50 * 400, -20, 20)
-
-        return np.clip(score, 0, 100)
-
-    def _simulate_multi_timeframe(
-        self,
-        price: float,
-        ema50: float,
-        ema200: float,
-        rsi: float,
-        macd_histogram: float
-    ) -> Tuple[str, str, str, float]:
-        """
-        Simulate multi-timeframe trends
-
-        Since we only have 1H data, we infer other timeframes
-        from current indicators
-
-        Returns:
-            (tf_1h, tf_4h, tf_1d, alignment_score)
-        """
-
-        # 1H timeframe (most reactive)
-        if rsi > 55 and macd_histogram > 0:
-            tf_1h = "bullish"
-        elif rsi < 45 and macd_histogram < 0:
-            tf_1h = "bearish"
-        else:
-            tf_1h = "neutral"
-
-        # 4H timeframe (medium-term)
-        if price > ema50 and ema50 > ema200:
-            tf_4h = "bullish"
-        elif price < ema50 and ema50 < ema200:
-            tf_4h = "bearish"
-        else:
-            tf_4h = "neutral"
-
-        # 1D timeframe (long-term)
-        if ema50 > ema200:
-            ema_gap = (ema50 - ema200) / ema200
-            if ema_gap > 0.02:
-                tf_1d = "bullish"
-            else:
-                tf_1d = "neutral"
-        else:
-            ema_gap = (ema200 - ema50) / ema200
-            if ema_gap > 0.02:
-                tf_1d = "bearish"
-            else:
-                tf_1d = "neutral"
-
-        # Alignment score
-        trend_map = {"bullish": 100, "neutral": 50, "bearish": 0}
-
-        alignment_score = (
-            trend_map[tf_1h] * 0.2 +
-            trend_map[tf_4h] * 0.3 +
-            trend_map[tf_1d] * 0.5
-        )
-
-        return tf_1h, tf_4h, tf_1d, alignment_score
+        return min(score, 100)
