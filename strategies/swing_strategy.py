@@ -583,12 +583,13 @@ class SwingStrategy(BaseStrategy):
         return True
 
     def _get_tier_config(self, tier: str) -> Dict:
+        """✅ REALISTIC TARGETS - Professional grade"""
         configs = {
-            "BLUE_CHIP": {"target": 10.0, "hold": "5-8 დღე"},
-            "HIGH_GROWTH": {"target": 16.0, "hold": "4-8 დღე"},
-            "MEME": {"target": 28.0, "hold": "3-7 დღე"},
-            "NARRATIVE": {"target": 20.0, "hold": "4-8 დღე"},
-            "EMERGING": {"target": 22.0, "hold": "5-9 დღე"}
+            "BLUE_CHIP": {"target": 8.0, "hold": "5-8 დღე"},  # was 10% → now 8%
+            "HIGH_GROWTH": {"target": 10.0, "hold": "4-8 დღე"},  # was 16% → now 10%
+            "MEME": {"target": 15.0, "hold": "3-7 დღე"},  # was 28% → now 15%
+            "NARRATIVE": {"target": 12.0, "hold": "4-8 დღე"},  # was 20% → now 12%
+            "EMERGING": {"target": 14.0, "hold": "5-9 დღე"}  # was 22% → now 14%
         }
         return configs.get(tier, configs["HIGH_GROWTH"])
 
