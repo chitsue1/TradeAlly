@@ -1,33 +1,17 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-SIGNAL HISTORY DATABASE - v1.0
+SIGNAL HISTORY DATABASE - v1.0 FIXED
 ═══════════════════════════════════════════════════════════════════════════════
-
-💡 იდეა:
-✅ ᲛᲮᲝᲚᲝᲓ გაგზავნილი სიგნალები (არა AI-ის უარყოფილი)
-✅ REAL ფასი როცა მომწერა
-✅ REAL ფასი როცა დაკეტო (user აღმოჩნდა? stop loss? timeout?)
-✅ რამდენი დღე დაჰოდა
-✅ რამდენი % მოგება/ზარალი
-✅ გრაფიკი: "წინა 30 სიგნალი - win/loss"
-
-✅ ᲐᲠᲘᲡ ᲨᲔᲜᲐᲮᲣᲚᲘ:
-- თითოეული სიგნალი რო გაიგზავნა
-- როცა დაკეტო (user თხოვნის მიხედვით)
-- პროფიტ %
-- საიდან რამდენი დღე
-
-❌ ᲐᲠᲘᲡ ᲨᲔᲜᲐᲮᲣᲚᲘ:
-- AI-ის უარყოფილი (ეს internal, მომხმარებელი არ იცის)
 """
 
 import sqlite3
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -73,27 +57,20 @@ class SentSignal:
 @dataclass
 class SignalResult:
     """სიგნალის შედეგი"""
+    # Required fields (no defaults)
     signal_id: int
     symbol: str
-
-    # Entry
-    actual_entry_price: float  # რაზე შევიდა user (თუ შევიდა)
-    entry_time: str  # user-ის entry დრო
-
-    # Exit
-    exit_price: float  # რაზე გამოვიდა
-    exit_time: str  # გამოსვლის დრო
-    exit_reason: str  # "target", "stop", "timeout", "manual"
-
-    # P&L
+    actual_entry_price: float
+    entry_time: str
+    exit_price: float
+    exit_time: str
+    exit_reason: str
     profit_pct: float
-    profit_usd: Optional[float] = None  # თუ user-ი თქვა თუ რა თანხა
-
-    # Duration
     days_held: float
-
-    # Status
     status: SignalStatus
+
+    # Optional fields (MUST HAVE DEFAULTS)
+    profit_usd: Optional[float] = None
 
 # ═══════════════════════════════════════════════════════════════════════════
 # DATABASE
@@ -202,11 +179,7 @@ class SignalHistoryDB:
     # ═══════════════════════════════════════════════════════════════════════
 
     def record_sent_signal(self, signal: SentSignal) -> int:
-        """
-        ნოვი სიგნალი რო გაიგზავნა
-
-        Returns: signal_id
-        """
+        """ნოვი სიგნალი რო გაიგზავნა"""
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
@@ -245,9 +218,7 @@ class SignalHistoryDB:
             return signal_id
 
     def record_signal_result(self, result: SignalResult):
-        """
-        სიგნალის შედეგი (როცა დაკეტო)
-        """
+        """სიგნალის შედეგი (როცა დაკეტო)"""
 
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
@@ -300,9 +271,7 @@ class SignalHistoryDB:
     # ═══════════════════════════════════════════════════════════════════════
 
     def get_signal_with_result(self, signal_id: int) -> Optional[Dict]:
-        """
-        სიგნალი + შედეგი
-        """
+        """სიგნალი + შედეგი"""
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -329,9 +298,7 @@ class SignalHistoryDB:
             return dict(row) if row else None
 
     def get_recent_signals(self, limit: int = 30) -> List[Dict]:
-        """
-        ბოლო N სიგნალი (რო გაიგზავნა)
-        """
+        """ბოლო N სიგნალი (რო გაიგზავნა)"""
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -358,9 +325,7 @@ class SignalHistoryDB:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_symbol_history(self, symbol: str) -> Dict:
-        """
-        კონკრეტული symbol-ის ისტორია
-        """
+        """კონკრეტული symbol-ის ისტორია"""
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
@@ -391,9 +356,7 @@ class SignalHistoryDB:
             }
 
     def get_strategy_performance(self, strategy: str) -> Dict:
-        """
-        სტრატეგიის performance
-        """
+        """სტრატეგიის performance"""
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
@@ -420,9 +383,7 @@ class SignalHistoryDB:
             }
 
     def get_overall_stats(self) -> Dict:
-        """
-        მთლიანი სტატისტიკა
-        """
+        """მთლიანი სტატისტიკა"""
 
         with sqlite3.connect(self.db_path) as conn:
             # Total signals sent
@@ -463,9 +424,7 @@ class SignalHistoryDB:
     # ═══════════════════════════════════════════════════════════════════════
 
     def generate_report(self) -> str:
-        """
-        დაწვრილებული რეპორტი
-        """
+        """დაწვრილებული რეპორტი"""
 
         stats = self.get_overall_stats()
         recent = self.get_recent_signals(limit=10)
@@ -494,9 +453,7 @@ class SignalHistoryDB:
         return report
 
     def get_dashboard_data(self) -> Dict:
-        """
-        დაშბორდის ამჟამინდელი მონაცემი
-        """
+        """დაშბორდის ამჟამინდელი მონაცემი"""
 
         stats = self.get_overall_stats()
 
@@ -509,61 +466,3 @@ class SignalHistoryDB:
             'total_profit': stats['total_profit_pct'],
             'last_updated': datetime.now().isoformat()
         }
-
-# ═══════════════════════════════════════════════════════════════════════════
-# USAGE EXAMPLE
-# ═══════════════════════════════════════════════════════════════════════════
-
-if __name__ == "__main__":
-
-    # Initialize DB
-    db = SignalHistoryDB("signal_history.db")
-
-    # Example 1: Record a sent signal
-    sent_signal = SentSignal(
-        symbol="BTC/USD",
-        strategy="long_term",
-        entry_price=45000.0,
-        target_price=47000.0,
-        stop_loss_price=43500.0,
-        sent_time=datetime.now().isoformat(),
-        confidence_score=75.0,
-        ai_approved=True,
-        expected_profit_min=2.0,
-        expected_profit_max=6.0,
-        tier="BLUE_CHIP",
-        message_text="🔵 Long-Term Investment..."
-    )
-
-    signal_id = db.record_sent_signal(sent_signal)
-    print(f"✅ Signal recorded with ID: {signal_id}")
-
-    # Example 2: Record result (simulating user closing at profit)
-    from datetime import timedelta
-
-    exit_time_dt = datetime.now() + timedelta(days=3)
-
-    result = SignalResult(
-        signal_id=signal_id,
-        symbol="BTC/USD",
-        actual_entry_price=45000.0,
-        entry_time=datetime.now().isoformat(),
-        exit_price=46500.0,  # User closed at 46500
-        exit_time=exit_time_dt.isoformat(),
-        exit_reason="manual",  # User closed manually
-        profit_pct=3.33,  # 1500 / 45000 * 100
-        profit_usd=1500.0,  # If user had 1 BTC
-        days_held=3.0,
-        status=SignalStatus.CLOSED_WIN
-    )
-
-    db.record_signal_result(result)
-    print(f"✅ Result recorded")
-
-    # Example 3: Get report
-    report = db.generate_report()
-    print(report)
-
-    # Example 4: Get dashboard
-    dashboard = db.get_dashboard_data()
-    print(f"📊 Dashboard: {dashboard}")
