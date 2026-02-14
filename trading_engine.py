@@ -471,7 +471,7 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def scan_market(self, all_assets: List[str]):
-        """ბაზარი სკანირება ყველა აქტივზე"""
+        """ბაზარი სკანირება ყველა აქტივზე - OPTIMIZED AI USAGE"""
 
         logger.info("=" * 70)
         logger.info(
@@ -491,6 +491,9 @@ class TradingEngine:
 
         start = time.time()
         success = fail = signals_generated = signals_sent = ai_rejected = 0
+
+        # ✅ NEW: Min confidence for AI evaluation
+        MIN_CONFIDENCE_FOR_AI = 55
 
         for symbol in all_assets:
             try:
@@ -549,8 +552,11 @@ class TradingEngine:
                 tier = self.get_tier(symbol)
 
                 # ════════════════════════════════════════════════════════════
-                # 4. STRATEGY ANALYSIS
+                # 4. STRATEGY ANALYSIS (NO API CALLS)
                 # ════════════════════════════════════════════════════════════
+
+                best_signal = None
+                best_confidence = 0
 
                 for strategy in self.strategies:
                     signal = strategy.analyze(
@@ -563,62 +569,96 @@ class TradingEngine:
                         market_structure
                     )
 
-                    if signal:
-                        signals_generated += 1
-                        should_send, reason = strategy.should_send_signal(symbol, signal)
+                    # ✅ Keep only BEST signal per symbol
+                    if signal and signal.confidence_score > best_confidence:
+                        best_signal = signal
+                        best_confidence = signal.confidence_score
 
-                        if should_send:
-                            # ════════════════════════════════════════════════
-                            # 5. AI EVALUATION
-                            # ════════════════════════════════════════════════
+                if best_signal:
+                    signals_generated += 1
 
-                            ai_eval = None
+                    # ════════════════════════════════════════════════════════
+                    # 5. FILTER BEFORE AI (SAVE API CREDITS!)
+                    # ════════════════════════════════════════════════════════
 
-                            if self.ai_enabled and self.ai_evaluator:
-                                logger.info(f"🧠 {symbol}: AI evaluating...")
-                                try:
-                                    ai_eval = await self.ai_evaluator.evaluate_signal(
-                                        symbol=symbol,
-                                        strategy_type=strategy.strategy_type.value,
-                                        entry_price=signal.entry_price,
-                                        strategy_confidence=signal.confidence_score,
-                                        indicators=technical,
-                                        market_structure={
-                                            'nearest_support': market_structure.nearest_support,
-                                            'nearest_resistance': market_structure.nearest_resistance,
-                                            'volume_trend': market_structure.volume_trend
-                                        },
-                                        regime=regime.regime.value,
-                                        tier=tier
-                                    )
+                    # ✅ FILTER 1: Confidence check
+                    if best_signal.confidence_score < MIN_CONFIDENCE_FOR_AI:
+                        logger.debug(
+                            f"⏭️ {symbol}: Confidence low ({best_signal.confidence_score:.0f}%)"
+                        )
+                        continue
 
-                                    ai_should_send, ai_reason = (
-                                        self.ai_evaluator.should_send_signal(ai_eval)
-                                    )
+                    # ✅ FILTER 2: Strategy says send?
+                    strategy_instance = next(
+                        (s for s in self.strategies 
+                         if s.strategy_type == best_signal.strategy_type),
+                        None
+                    )
 
-                                    if ai_should_send:
-                                        signals_sent += 1
-                                        self.stats['ai_approved'] += 1
-                                        logger.info(f"✅ {symbol}: AI APPROVED")
-                                        await self.send_buy_signal(signal, ai_eval)
-                                        strategy.record_activity()
-                                    else:
-                                        ai_rejected += 1
-                                        self.stats['ai_rejected'] += 1
-                                        logger.info(f"❌ {symbol}: AI REJECTED")
+                    if strategy_instance:
+                        should_send, reason = strategy_instance.should_send_signal(
+                            symbol, best_signal
+                        )
 
-                                except Exception as e:
-                                    logger.error(f"❌ AI error: {e}")
-                                    # Fallback: send anyway
-                                    signals_sent += 1
-                                    await self.send_buy_signal(signal)
-                                    strategy.record_activity()
-                            else:
+                        if not should_send:
+                            logger.debug(f"⏭️ {symbol}: Strategy NO - {reason}")
+                            continue
+
+                    # ════════════════════════════════════════════════════════
+                    # 6. AI EVALUATION (ONLY FOR PROMISING SIGNALS!)
+                    # ════════════════════════════════════════════════════════
+
+                    ai_eval = None
+
+                    if self.ai_enabled and self.ai_evaluator:
+                        logger.info(f"🧠 {symbol}: AI evaluating ({best_signal.confidence_score:.0f}%)...")
+                        try:
+                            ai_eval = await self.ai_evaluator.evaluate_signal(
+                                symbol=symbol,
+                                strategy_type=best_signal.strategy_type.value,
+                                entry_price=best_signal.entry_price,
+                                strategy_confidence=best_signal.confidence_score,
+                                indicators=technical,
+                                market_structure={
+                                    'nearest_support': market_structure.nearest_support,
+                                    'nearest_resistance': market_structure.nearest_resistance,
+                                    'volume_trend': market_structure.volume_trend
+                                },
+                                regime=regime.regime.value,
+                                tier=tier
+                            )
+
+                            ai_should_send, ai_reason = (
+                                self.ai_evaluator.should_send_signal(ai_eval)
+                            )
+
+                            if ai_should_send:
                                 signals_sent += 1
-                                await self.send_buy_signal(signal)
-                                strategy.record_activity()
+                                self.stats['ai_approved'] += 1
+                                logger.info(f"✅ {symbol}: AI APPROVED")
+                                await self.send_buy_signal(best_signal, ai_eval)
+                                if strategy_instance:
+                                    strategy_instance.record_activity()
+                            else:
+                                ai_rejected += 1
+                                self.stats['ai_rejected'] += 1
+                                logger.info(f"❌ {symbol}: AI REJECTED - {ai_reason}")
 
-                            break
+                        except Exception as e:
+                            logger.error(f"❌ AI error: {e}")
+                            # Fallback: send anyway if high confidence
+                            if best_signal.confidence_score >= 70:
+                                signals_sent += 1
+                                await self.send_buy_signal(best_signal)
+                                if strategy_instance:
+                                    strategy_instance.record_activity()
+                    else:
+                        # AI disabled - send high-confidence signals
+                        if best_signal.confidence_score >= 65:
+                            signals_sent += 1
+                            await self.send_buy_signal(best_signal)
+                            if strategy_instance:
+                                strategy_instance.record_activity()
 
                 await asyncio.sleep(ASSET_DELAY)
 

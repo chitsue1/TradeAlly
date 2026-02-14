@@ -1,24 +1,12 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-TELEGRAM HANDLER v3.0 - COMPLETE PRODUCTION
+TELEGRAM HANDLER v3.0 - SAFE MARKDOWN VERSION
 ═══════════════════════════════════════════════════════════════════════════════
 
-✅ ის თავიდან ყველა (ძველი):
-- User commands
-- Admin commands
-- Payment handling
-- Analytics
-- Broadcasting
-
-✅ ახლის დამატება:
-- Exit Handler integration
-- Position Monitoring commands
-- Signal History Database
-- Complete dashboard
-
-AUTHOR: Trading System Architecture Team
-DATE: 2024-02-14
-VERSION: 3.0
+✅ Fixed:
+- All markdown parsing errors
+- Safe text formatting
+- No asterisks/backticks issues
 """
 
 import asyncio
@@ -34,14 +22,8 @@ from telegram.ext import (
     filters, CallbackQueryHandler
 )
 
-# ═══════════════════════════════════════════════════════════════════════════
-# IMPORTS
-# ═══════════════════════════════════════════════════════════════════════════
-
 from config import *
 from analytics_system import AnalyticsDatabase, AnalyticsDashboard
-
-# ✅ NEW IMPORTS
 from exit_signals_handler import ExitSignalsHandler
 from position_monitor import PositionMonitor
 from sell_signal_message_generator import SellSignalMessageGenerator
@@ -50,172 +32,152 @@ from signal_history_db import SignalHistoryDB, SentSignal, SignalResult, SignalS
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════
+# HELPER: Safe text formatting
+# ═══════════════════════════════════════════════════════════════════════════
+
+def safe_text(text: str) -> str:
+    """Remove problematic markdown characters"""
+    return text.replace('**', '').replace('`', '').replace('_', '')
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MESSAGE TEMPLATES
 # ═══════════════════════════════════════════════════════════════════════════
 
-WELCOME_MSG_TEMPLATE = """🎯 **Welcome to AI Trading Bot!**
+WELCOME_MSG_TEMPLATE = """Welcome to AI Trading Bot!
 
-👋 Hello {username}!
+Hello {username}!
 
-📊 **ჩვენი სერვისი:**
-• 🔍 {crypto_count} კრიპტო მონიტორინგი 24/7
-• 🧠 {ai_info} AI Risk Evaluator
-• 📈 4 პროფესიონალური სტრატეგია
-• 💳 დაახლოვებული გადახდა
+Our Service:
+- 56 Crypto Monitoring 24/7
+- AI Risk Evaluator Active
+- 4 Professional Strategies
+- Seamless Payments
 
-💰 **ფასი:** 150₾ / თვე
+Price: 150₾ / month
 
-🚀 დაიწყეთ: /subscribe
-📖 დაფიქსირება: /guide
+Get Started: /subscribe
+Learn: /guide
 """
 
-TIER_DESCRIPTIONS = """📊 **TIER DESCRIPTIONS**
+TIER_DESCRIPTIONS = """TIER DESCRIPTIONS
 
-**TIER 1: BLUE CHIP** 🔵
-• BTC, ETH, SOL, BNBUSDT
-• მაღალი ლიკვიდობა
-• დაბალი ვოლატილობა
-• მსუბუქი ტრეიდი
+TIER 1: BLUE CHIP
+- BTC, ETH, SOL, BNB
+- High Liquidity
+- Low Volatility
+- Stable Trading
 
-**TIER 2: HIGH GROWTH** 📈
-• AVAX, LINK, POLKADOT, etc
-• საშუალო ლიკვიდობა
-• საშუალო ვოლატილობა
+TIER 2: HIGH GROWTH
+- AVAX, LINK, POLKADOT, etc
+- Medium Liquidity
+- Medium Volatility
 
-**TIER 3: MEME COINS** 🎪
-• DOGE, SHIB, PEPE, etc
-• ცხელი, სწრაფი
-• მაღალი რისკი, მაღალი რეზიულტატი
+TIER 3: MEME COINS
+- DOGE, SHIB, PEPE, etc
+- Hot, Fast
+- High Risk, High Reward
 
-**TIER 4: NARRATIVE** 📚
-• AI tokens, DeFi, Layer2
-• განვითარება
-• საშუალო რისკი
+TIER 4: NARRATIVE
+- AI tokens, DeFi, Layer2
+- Development
+- Medium Risk
 
-**TIER 5: EMERGING** 🌱
-• ახალი პროჯექტი
-• უმაღლესი რისკი
-• უმაღლესი რეზულტატი სიზღვარი
+TIER 5: EMERGING
+- New Projects
+- Ultimate Risk
+- Ultimate Upside
 """
 
-PAYMENT_INSTRUCTIONS = """💳 **PAYMENT INSTRUCTIONS**
+PAYMENT_INSTRUCTIONS = """PAYMENT INSTRUCTIONS
 
-**ხელმისაწვდომი:** 150₾ / თვე
+Access: 150₾ / month
 
-📱 **გადახდის გზები:**
+Payment Methods:
 
-1️⃣ **TBC Bank Transfer**
-   • Recipient: [NAME]
-   • Account: [ACCOUNT]
-   • Reference: თქვენი user_id
+1. TBC Bank Transfer
+   Recipient: [NAME]
+   Account: [ACCOUNT]
+   Reference: Your user_id
 
-2️⃣ **UNISTREAM**
-   • Number: [NUMBER]
-   • Message: თქვენი user_id
+2. UNISTREAM
+   Number: [NUMBER]
+   Message: Your user_id
 
-3️⃣ **BOG / USDT**
-   • Send BOG/USDT
-   • Reference: თქვენი user_id
+3. BOG / USDT
+   Send BOG/USDT
+   Reference: Your user_id
 
-📸 **გადახდის შემდეგ:**
-1. გააკეთეთ ფოტო proof-ის
-2. გამოუზიდეთ ფოტო აქ
-3. ადმინი დადასტურებს (1-24 საათი)
+After Payment:
+1. Take photo of proof
+2. Upload photo here
+3. Admin confirms (1-24 hours)
 
-✅ **მერე:**
-• Premium აქტივირებული 30 დღით
-• AI სიგნალი ჩართული
-• Analytics access
+Then:
+- Premium Active 30 days
+- AI Signals On
+- Analytics Access
 
-❓ **კითხვები?** @support_bot
+Questions? Contact @support
 """
 
 GUIDE_FOOTER = (
-    "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    "📍 **Remember:** DYOR (Do Your Own Research)\n"
-    "⚠️ **Risk Disclaimer:** აქ ფინანსური რჩევა არა\n"
-    "💡 **Tip:** ყოველთვის გამოიყენეთ stop-loss!\n"
+    "\n\nRemember: DYOR (Do Your Own Research)\n"
+    "Risk Disclaimer: Not financial advice\n"
+    "Tip: Always use stop-loss!\n"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TELEGRAM HANDLER v3.0
+# TELEGRAM HANDLER v3.0 SAFE
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TelegramHandler:
-    """TELEGRAM HANDLER v3.0 - COMPLETE PRODUCTION"""
+    """TELEGRAM HANDLER v3.0 - SAFE VERSION"""
 
     def __init__(self, trading_engine):
-        logger.info("🚀 TelegramHandler v3.0 initializing...")
+        logger.info("Telegram Handler v3.0 initializing...")
 
         self.trading_engine = trading_engine
-
-        # ════════════════════════════════════════════════════════════════════
-        # TELEGRAM APPLICATION
-        # ════════════════════════════════════════════════════════════════════
-
         self.application = Application.builder().token(TELEGRAM_TOKEN).build()
         self.bot = self.application.bot
 
-        # ════════════════════════════════════════════════════════════════════
-        # FILE PATHS
-        # ════════════════════════════════════════════════════════════════════
-
         self.subscriptions_file = "subscriptions.json"
         self.payment_requests_file = "payment_requests.json"
-
-        # ════════════════════════════════════════════════════════════════════
-        # DATA MANAGEMENT
-        # ════════════════════════════════════════════════════════════════════
 
         self.subscriptions = self._load_json(self.subscriptions_file)
         self.payment_requests = self._load_json(self.payment_requests_file)
         self.last_notifications = {}
 
-        # ════════════════════════════════════════════════════════════════════
-        # DATABASES
-        # ════════════════════════════════════════════════════════════════════
-
         self.analytics_db = AnalyticsDatabase("trading_analytics.db")
         self.dashboard = AnalyticsDashboard(self.analytics_db)
 
-        # ✅ NEW: Exit Handler & Databases
         self.exit_handler = trading_engine.exit_handler
-        self.position_monitor = None  # დაყენდება run-ის დროს
+        self.position_monitor = None
         self.signal_history_db = SignalHistoryDB("signal_history.db")
-
-        # ════════════════════════════════════════════════════════════════════
-        # LIFECYCLE
-        # ════════════════════════════════════════════════════════════════════
 
         self._is_running = False
         self._start_lock = asyncio.Lock()
 
-        # Setup all handlers
         self._setup_handlers()
-
-        logger.info("✅ TelegramHandler v3.0 ready")
+        logger.info("Telegram Handler v3.0 ready")
 
     # ═══════════════════════════════════════════════════════════════════════
     # FILE MANAGEMENT
     # ═══════════════════════════════════════════════════════════════════════
 
     def _load_json(self, filename: str) -> Dict:
-        """JSON ჩატვირთვა"""
         try:
             if os.path.exists(filename):
                 with open(filename, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    # Convert string keys to int for subscriptions
                     if filename == self.subscriptions_file:
                         return {int(k): v for k, v in data.items()}
                     return data
             return {}
         except Exception as e:
-            logger.error(f"❌ Error loading {filename}: {e}")
+            logger.error(f"Error loading {filename}: {e}")
             return {}
 
     def _save_json(self, data: Dict, filename: str):
-        """JSON შენახვა"""
         try:
             temp_data = data
             if filename == self.subscriptions_file:
@@ -224,14 +186,13 @@ class TelegramHandler:
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(temp_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"❌ Error saving {filename}: {e}")
+            logger.error(f"Error saving {filename}: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
     # SUBSCRIPTION MANAGEMENT
     # ═══════════════════════════════════════════════════════════════════════
 
     def is_subscriber(self, user_id: int) -> bool:
-        """აქტიური საბსქრიფშენი?"""
         if user_id not in self.subscriptions:
             return False
 
@@ -246,7 +207,6 @@ class TelegramHandler:
             return False
 
     def add_subscription(self, user_id: int, days: int = 30) -> bool:
-        """საბსქრიფშენ დამატება"""
         expires = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
         self.subscriptions[user_id] = {
             'expires_at': expires,
@@ -255,24 +215,21 @@ class TelegramHandler:
             'days': days
         }
         self._save_json(self.subscriptions, self.subscriptions_file)
-        logger.info(f"✅ User {user_id} subscribed for {days} days (expires: {expires})")
+        logger.info(f"User {user_id} subscribed for {days} days")
         return True
 
     def remove_subscription(self, user_id: int) -> bool:
-        """საბსქრიფშენ მოხსნა"""
         if user_id in self.subscriptions:
             del self.subscriptions[user_id]
             self._save_json(self.subscriptions, self.subscriptions_file)
-            logger.info(f"✅ User {user_id} subscription removed")
+            logger.info(f"User {user_id} subscription removed")
             return True
         return False
 
     def get_active_subscribers(self) -> List[int]:
-        """აქტიური მომხმარებელი"""
         return [uid for uid in self.subscriptions.keys() if self.is_subscriber(uid)]
 
     def get_subscriber_info(self, user_id: int) -> Optional[Dict]:
-        """მომხმარებელი info"""
         if user_id in self.subscriptions:
             return self.subscriptions[user_id]
         return None
@@ -282,79 +239,68 @@ class TelegramHandler:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """🌟 /start - მოგესალმო"""
         username = update.effective_user.username or "friend"
-        message = WELCOME_MSG_TEMPLATE.format(
-            username=username,
-            crypto_count=len(CRYPTO),
-            ai_info="Active 🧠",
-            stocks_count=0,
-            commodities_count=0
-        )
-        await update.message.reply_text(message, parse_mode='Markdown')
+        message = WELCOME_MSG_TEMPLATE.format(username=username)
+        await update.message.reply_text(message)
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """❓ /help - დახმარება"""
-        help_text = (
-            "❓ **დახმარება**\n\n"
-            "**User Commands:**\n"
-            "/start - დაიწყეთ\n"
-            "/guide - RSI/EMA განმარტება\n"
-            "/tiers - ტიერ აღწერა\n"
-            "/mystatus - თქვენი ხელმისაწვდომი\n"
-            "/subscribe - Premium აქტივაცია\n\n"
-            "**Admin Commands:**\n"
-            "/admin - ადმინ პანელი\n"
-            "/stats - Analytics\n"
-            "/signals - ბოლო signals\n"
-            "/dashboard - Dashboard\n"
-        )
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        help_text = """Help
+
+User Commands:
+/start - Begin
+/guide - RSI/EMA explanation
+/tiers - Tier descriptions
+/mystatus - Your subscription
+/subscribe - Premium activation
+
+Admin Commands:
+/admin - Admin panel
+/stats - Analytics
+/signals - Signal history
+/dashboard - Full report
+"""
+        await update.message.reply_text(help_text)
 
     async def cmd_guide(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📖 /guide - სიგნალის განმარტება"""
-        guide_text = (
-            "📖 **AI Trading Guide**\n\n"
+        guide_text = """AI Trading Guide
 
-            "**RSI (Relative Strength Index)**\n"
-            "• <30 = გადაყიდულია (ყიდვა 📉)\n"
-            "• 30-70 = ნორმა\n"
-            "• >70 = გადახურებული (გაყიდვა 📈)\n\n"
+RSI (Relative Strength Index)
+- <30 = Oversold (Buy signal)
+- 30-70 = Normal
+- >70 = Overbought (Sell signal)
 
-            "**EMA 200 (Exponential Moving Average)**\n"
-            "• ფასი > EMA200 = აღმავალი 📈\n"
-            "• ფასი < EMA200 = დაღმავალი 📉\n"
-            "• გრძელვადიანი ტრენდი\n\n"
+EMA 200 (Exponential Moving Average)
+- Price > EMA200 = Uptrend
+- Price < EMA200 = Downtrend
+- Long-term trend indicator
 
-            "**Bollinger Bands (BB)**\n"
-            "• BB Low = შესაძლო ასხლეტა 🎯\n"
-            "• BB High = შესაძლო დაცემა ⚠️\n"
-            "• ვოლატილობის მაჩვენებელი\n\n"
+Bollinger Bands (BB)
+- BB Low touch = Possible bounce
+- BB High touch = Possible decline
+- Volatility measure
 
-            "**MACD (Moving Average Convergence)**\n"
-            "• Histogram > 0 = აღმავალი momentum\n"
-            "• Histogram < 0 = დაღმავალი momentum\n"
-            "• Crossover = ტრენდ ცვლილება\n\n"
+MACD (Moving Average Convergence)
+- Histogram > 0 = Uptrend momentum
+- Histogram < 0 = Downtrend momentum
+- Crossover = Trend change
 
-            "**Stop-Loss & Take-Profit**\n"
-            "• Stop-Loss = ზარალის შეზღუდვა 🔴\n"
-            "• Take-Profit = მოგების ფიქსირება 🟢\n"
-            "• ყოველთვის გამოიყენეთ!\n\n"
+Stop-Loss & Take-Profit
+- Stop-Loss = Limit losses
+- Take-Profit = Lock in gains
+- Always use!
 
-            "**AI Score**\n"
-            "• 0-30: სუსტი ❌\n"
-            "• 30-45: საშუალო ⚠️\n"
-            "• 45-65: კარგი ✅\n"
-            "• 65+: ძლიერი 🔥\n"
-        )
-        await update.message.reply_text(guide_text, parse_mode='Markdown')
+AI Score
+- 0-30: Weak
+- 30-45: Medium
+- 45-65: Good
+- 65+: Strong
+"""
+        await update.message.reply_text(guide_text)
 
     async def cmd_tiers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /tiers - ტიერ აღწერა"""
-        await update.message.reply_text(TIER_DESCRIPTIONS, parse_mode='Markdown')
+        await update.message.reply_text(TIER_DESCRIPTIONS)
 
     async def cmd_mystatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """✅ /mystatus - თქვენი ხელმისაწვდომი"""
         user_id = update.effective_user.id
         sub = self.get_subscriber_info(user_id)
 
@@ -365,69 +311,65 @@ class TelegramHandler:
             days_left = (expires_date - datetime.now().date()).days
 
             status_msg = (
-                f"✅ **Premium Active**\n\n"
-                f"📅 Activated: `{activated}`\n"
-                f"📅 Expires: `{expires}`\n"
-                f"⏳ Days left: **{days_left}**\n\n"
-                f"📊 Signals: ✅ Active\n"
-                f"🔔 Notifications: ✅ On"
+                f"Status: Premium Active\n\n"
+                f"Activated: {activated}\n"
+                f"Expires: {expires}\n"
+                f"Days left: {days_left}\n\n"
+                f"Signals: Active\n"
+                f"Notifications: On"
             )
         else:
             status_msg = (
-                "⚠️ **No Active Subscription**\n\n"
-                "💰 Price: 150₾ / month\n\n"
+                "No Active Subscription\n\n"
+                "Price: 150₾ / month\n\n"
                 "Get premium: /subscribe"
             )
 
-        await update.message.reply_text(status_msg, parse_mode='Markdown')
+        await update.message.reply_text(status_msg)
 
     async def cmd_subscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """💳 /subscribe - გამოწერა"""
-        await update.message.reply_text(PAYMENT_INSTRUCTIONS, parse_mode='Markdown')
+        await update.message.reply_text(PAYMENT_INSTRUCTIONS)
 
     # ═══════════════════════════════════════════════════════════════════════
     # ADMIN COMMANDS
     # ═══════════════════════════════════════════════════════════════════════
 
     async def cmd_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """👑 /admin - ადმინ პანელი"""
         if update.effective_user.id != ADMIN_ID:
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("Unauthorized")
             return
 
-        admin_msg = (
-            "👑 **Admin Panel v3.0**\n\n"
+        admin_msg = """Admin Panel v3.0
 
-            "**👥 User Management:**\n"
-            "/adduser [id] [days] - Add subscription\n"
-            "/removeuser [id] - Remove subscription\n"
-            "/listusers - List all users\n"
-            "/botstats - Bot statistics\n\n"
+User Management:
+/adduser [id] [days] - Add subscription
+/removeuser [id] - Remove subscription
+/listusers - List all users
+/botstats - Bot statistics
 
-            "**📊 Signal History:**\n"
-            "/signals - Recent 20 signals\n"
-            "/signalstats - Overall stats\n"
-            "/symbolstats [SYM] - Symbol stats\n"
-            "/strategystats [STR] - Strategy stats\n"
-            "/dashboard - Full dashboard\n\n"
+Signal History:
+/signals - Recent 20 signals
+/signalstats - Overall stats
+/symbolstats [SYM] - Symbol stats
+/strategystats [STR] - Strategy stats
+/dashboard - Full dashboard
 
-            "**📍 Position Monitoring:**\n"
-            "/openpositions - Active positions\n"
-            "/closedpositions - Closed trades\n"
-            "/exitstats - Exit statistics\n"
-            "/enginestatus - Engine status\n\n"
+Position Monitoring:
+/openpositions - Active positions
+/closedpositions - Closed trades
+/exitstats - Exit statistics
+/enginestatus - Engine status
 
-            "**📈 Analytics:**\n"
-            "/stats - Analytics dashboard\n"
-            "/active - Active signals\n"
-            "/performance - Strategy performance\n"
-            "/history [SYM] - Symbol history\n"
-            "/recent [N] - Recent signals"
-        )
-        await update.message.reply_text(admin_msg, parse_mode='Markdown')
+Analytics:
+/stats - Analytics dashboard
+/active - Active signals
+/performance - Strategy performance
+/history [SYM] - Symbol history
+/recent [N] - Recent signals
+"""
+        await update.message.reply_text(admin_msg)
 
     async def cmd_adduser(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """➕ /adduser - მომხმარებელ დამატება"""
         if update.effective_user.id != ADMIN_ID:
             return
 
@@ -438,42 +380,38 @@ class TelegramHandler:
             self.add_subscription(user_id, days)
 
             await update.message.reply_text(
-                f"✅ User `{user_id}` activated for {days} days",
-                parse_mode='Markdown'
+                f"User {user_id} activated for {days} days"
             )
 
-            # Notify user
             try:
                 await self.bot.send_message(
                     user_id,
-                    f"🎉 **Premium Activated!**\n\n"
-                    f"⏳ Valid for {days} days\n"
-                    f"📊 Signals: Active ✅\n"
-                    f"🚀 Get Started: /guide"
+                    f"Premium Activated!\n\n"
+                    f"Valid for {days} days\n"
+                    f"Signals: Active\n"
+                    f"Get Started: /guide"
                 )
             except:
                 pass
 
         except (IndexError, ValueError):
-            await update.message.reply_text("❌ Usage: /adduser [user_id] [days]")
+            await update.message.reply_text("Usage: /adduser [user_id] [days]")
 
     async def cmd_removeuser(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """➖ /removeuser - მომხმარებელ მოხსნა"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             user_id = int(context.args[0])
             if self.remove_subscription(user_id):
-                await update.message.reply_text(f"✅ User `{user_id}` removed")
+                await update.message.reply_text(f"User {user_id} removed")
             else:
-                await update.message.reply_text(f"❌ User `{user_id}` not found")
+                await update.message.reply_text(f"User {user_id} not found")
 
         except (IndexError, ValueError):
-            await update.message.reply_text("❌ Usage: /removeuser [user_id]")
+            await update.message.reply_text("Usage: /removeuser [user_id]")
 
     async def cmd_listusers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📋 /listusers - მომხმარებელი სია"""
         if update.effective_user.id != ADMIN_ID:
             return
 
@@ -481,65 +419,61 @@ class TelegramHandler:
         inactive = [uid for uid in self.subscriptions.keys() if uid not in active]
 
         msg = (
-            f"👥 **Users**\n\n"
-            f"✅ Active: {len(active)}\n"
-            f"❌ Inactive: {len(inactive)}\n"
-            f"📊 Total: {len(self.subscriptions)}\n\n"
+            f"Users\n\n"
+            f"Active: {len(active)}\n"
+            f"Inactive: {len(inactive)}\n"
+            f"Total: {len(self.subscriptions)}\n\n"
         )
 
         if active:
-            msg += "**Active Users:**\n"
+            msg += "Active Users:\n"
             for uid in active[:15]:
                 info = self.subscriptions[uid]
                 expires = info['expires_at']
-                msg += f"• `{uid}` - {expires}\n"
+                msg += f"{uid} - {expires}\n"
 
-        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text(msg)
 
     async def cmd_botstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /botstats - ბოტი სტატისტიკა"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         stats = getattr(self.trading_engine, 'stats', {})
 
         msg = (
-            f"📊 **Bot Statistics**\n\n"
-            f"**Users:**\n"
-            f"• Total: {len(self.subscriptions)}\n"
-            f"• Active: {len(self.get_active_subscribers())}\n\n"
-
-            f"**Signals:**\n"
-            f"• Sent: {stats.get('total_signals', 0)}\n"
-            f"• AI Approved: {stats.get('ai_approved', 0)}\n"
-            f"• AI Rejected: {stats.get('ai_rejected', 0)}\n\n"
-
-            f"**System:**\n"
-            f"• Cryptos: {len(CRYPTO)}\n"
-            f"• Strategies: 4\n"
-            f"• AI: {'Active' if AI_RISK_ENABLED else 'Inactive'}"
+            f"Bot Statistics\n\n"
+            f"Users:\n"
+            f"Total: {len(self.subscriptions)}\n"
+            f"Active: {len(self.get_active_subscribers())}\n\n"
+            f"Signals:\n"
+            f"Sent: {stats.get('total_signals', 0)}\n"
+            f"AI Approved: {stats.get('ai_approved', 0)}\n"
+            f"AI Rejected: {stats.get('ai_rejected', 0)}\n\n"
+            f"System:\n"
+            f"Cryptos: {len(CRYPTO)}\n"
+            f"Strategies: 4\n"
+            f"AI: {'Active' if AI_RISK_ENABLED else 'Inactive'}"
         )
-        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text(msg)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # ANALYTICS COMMANDS
+    # ANALYTICS COMMANDS (SAFE TEXT)
     # ═══════════════════════════════════════════════════════════════════════
 
     async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /stats - Analytics Dashboard"""
         if update.effective_user.id != ADMIN_ID:
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("Unauthorized")
             return
 
         try:
             dashboard_text = self.dashboard.generate_text_dashboard()
-            await update.message.reply_text(dashboard_text, parse_mode='Markdown')
+            safe = safe_text(dashboard_text)
+            await update.message.reply_text(safe)
         except Exception as e:
-            logger.error(f"❌ /stats error: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+            logger.error(f"Error /stats: {e}")
+            await update.message.reply_text(f"Error: {str(e)[:100]}")
 
     async def cmd_active(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📍 /active - აქტიური სიგნალი"""
         if update.effective_user.id != ADMIN_ID:
             return
 
@@ -547,57 +481,55 @@ class TelegramHandler:
             active_signals = self.analytics_db.get_active_signals()
 
             if not active_signals:
-                await update.message.reply_text("📭 **No active signals**")
+                await update.message.reply_text("No active signals")
                 return
 
-            text = "📍 **Active Signals:**\n\n"
+            text = "Active Signals:\n\n"
             for sig in active_signals[:10]:
-                text += f"**{sig['symbol']}** ({sig['strategy']})\n"
-                text += f"├─ Entry: ${sig['entry_price']:.4f}\n"
-                text += f"├─ Target: ${sig['target_price']:.4f}\n"
-                text += f"├─ Stop: ${sig['stop_loss']:.4f}\n"
-                text += f"└─ Conf: {sig['confidence']:.0f}%\n\n"
+                text += f"{sig['symbol']} ({sig['strategy']})\n"
+                text += f"Entry: ${sig['entry_price']:.4f}\n"
+                text += f"Target: ${sig['target_price']:.4f}\n"
+                text += f"Stop: ${sig['stop_loss']:.4f}\n"
+                text += f"Conf: {sig['confidence']:.0f}%\n\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /active error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /active: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_performance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """🎯 /performance - სტრატეგიის performance"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
-            text = "🎯 **Strategy Performance:**\n\n"
+            text = "Strategy Performance:\n\n"
 
             for strategy in ['long_term', 'scalping', 'opportunistic', 'swing']:
                 perf = self.analytics_db.get_strategy_performance(strategy)
 
                 if perf['total_signals'] == 0:
-                    text += f"**{strategy}:** No data\n\n"
+                    text += f"{strategy}: No data\n\n"
                     continue
 
-                text += f"**{strategy.upper()}**\n"
-                text += f"├─ Signals: {perf['total_signals']}\n"
-                text += f"├─ Win: {perf['success_rate']:.1f}%\n"
-                text += f"├─ Avg: {perf['avg_profit']:+.2f}%\n"
-                text += f"└─ Best: {perf['best_trade']:+.2f}%\n\n"
+                text += f"{strategy.upper()}\n"
+                text += f"Signals: {perf['total_signals']}\n"
+                text += f"Win: {perf['success_rate']:.1f}%\n"
+                text += f"Avg: {perf['avg_profit']:+.2f}%\n"
+                text += f"Best: {perf['best_trade']:+.2f}%\n\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /performance error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /performance: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📜 /history - Symbol History"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         if not context.args:
-            await update.message.reply_text("📝 /history SYMBOL\n\nEx: /history BTCUSDT")
+            await update.message.reply_text("Usage: /history SYMBOL\n\nEx: /history BTCUSDT")
             return
 
         try:
@@ -605,23 +537,22 @@ class TelegramHandler:
             history = self.analytics_db.get_symbol_history(symbol)
 
             if history['total_signals'] == 0:
-                await update.message.reply_text(f"📭 **{symbol}** - No history")
+                await update.message.reply_text(f"{symbol} - No history")
                 return
 
-            text = f"📜 **{symbol}**\n\n"
-            text += f"• Signals: {history['total_signals']}\n"
-            text += f"• Win Rate: {history['win_rate']:.1f}%\n"
-            text += f"• Avg: {history['avg_profit']:+.2f}%\n"
-            text += f"• Best: {history['best_trade']:+.2f}%\n"
+            text = f"{symbol}\n\n"
+            text += f"Signals: {history['total_signals']}\n"
+            text += f"Win Rate: {history['win_rate']:.1f}%\n"
+            text += f"Avg: {history['avg_profit']:+.2f}%\n"
+            text += f"Best: {history['best_trade']:+.2f}%\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /history error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /history: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_recent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📝 /recent - ბოლო სიგნალი"""
         if update.effective_user.id != ADMIN_ID:
             return
 
@@ -637,104 +568,99 @@ class TelegramHandler:
             recent = self.analytics_db.get_recent_signals(limit)
 
             if not recent:
-                await update.message.reply_text("📭 **No signals**")
+                await update.message.reply_text("No signals")
                 return
 
-            text = f"📝 **Recent {len(recent)}:**\n\n"
+            text = f"Recent {len(recent)}:\n\n"
 
             for sig in recent:
-                emoji = "✅" if sig['outcome'] == 'SUCCESS' else "❌" if sig['outcome'] == 'FAILURE' else "⏳"
+                emoji = "+" if sig['outcome'] == 'SUCCESS' else "-" if sig['outcome'] == 'FAILURE' else "?"
                 profit_str = f"{sig['profit']:+.2f}%" if sig['profit'] is not None else "Pending"
 
-                text += f"{emoji} **{sig['symbol']}** ({sig['strategy']})\n"
+                text += f"{emoji} {sig['symbol']} ({sig['strategy']})\n"
                 text += f"   {profit_str} | {sig['confidence']:.0f}%\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /recent error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /recent: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
     # POSITION MONITORING COMMANDS
     # ═══════════════════════════════════════════════════════════════════════
 
     async def cmd_openpositions(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /openpositions - აქტიური პოზიციები"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             if not self.position_monitor:
-                await update.message.reply_text("⚠️ Position Monitor not ready")
+                await update.message.reply_text("Position Monitor not ready")
                 return
 
             status_report = self.position_monitor.get_position_status_report()
-            await update.message.reply_text(status_report, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(status_report))
 
         except Exception as e:
-            logger.error(f"❌ /openpositions error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /openpositions: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_closedpositions(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📋 /closedpositions - დახურული ტრეიდი"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             if not self.position_monitor:
-                await update.message.reply_text("⚠️ Position Monitor not ready")
+                await update.message.reply_text("Position Monitor not ready")
                 return
 
             summary = self.position_monitor.get_closed_positions_summary()
-            await update.message.reply_text(summary, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(summary))
 
         except Exception as e:
-            logger.error(f"❌ /closedpositions error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /closedpositions: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_exitstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /exitstats - Exit სტატისტიკა"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             exit_stats = self.exit_handler.get_exit_statistics()
 
-            text = "📊 **Exit Statistics:**\n\n"
-            text += f"• Total Exits: {exit_stats['total_exits']}\n"
-            text += f"• Wins: {exit_stats['successful']}\n"
-            text += f"• Losses: {exit_stats['failed']}\n"
-            text += f"• Win Rate: {exit_stats.get('win_rate', 0):.1f}%\n\n"
-            text += f"• Avg Profit: {exit_stats['avg_profit']:+.2f}%\n"
-            text += f"• Best: {exit_stats['best_trade']:+.2f}%\n"
-            text += f"• Worst: {exit_stats['worst_trade']:+.2f}%\n"
+            text = "Exit Statistics:\n\n"
+            text += f"Total Exits: {exit_stats['total_exits']}\n"
+            text += f"Wins: {exit_stats['successful']}\n"
+            text += f"Losses: {exit_stats['failed']}\n"
+            text += f"Win Rate: {exit_stats.get('win_rate', 0):.1f}%\n\n"
+            text += f"Avg Profit: {exit_stats['avg_profit']:+.2f}%\n"
+            text += f"Best: {exit_stats['best_trade']:+.2f}%\n"
+            text += f"Worst: {exit_stats['worst_trade']:+.2f}%\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /exitstats error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /exitstats: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_enginestatus(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """🤖 /enginestatus - Engine status"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             status = self.trading_engine.get_engine_status()
-            await update.message.reply_text(status, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(status))
 
         except Exception as e:
-            logger.error(f"❌ /enginestatus error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /enginestatus: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
     # SIGNAL HISTORY COMMANDS
     # ═══════════════════════════════════════════════════════════════════════
 
     async def cmd_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📋 /signals - ბოლო სიგნალი"""
         if update.effective_user.id != ADMIN_ID:
             return
 
@@ -742,63 +668,61 @@ class TelegramHandler:
             recent = self.signal_history_db.get_recent_signals(limit=20)
 
             if not recent:
-                await update.message.reply_text("📭 **No signals**")
+                await update.message.reply_text("No signals")
                 return
 
-            text = "📋 **Recent 20:**\n\n"
+            text = "Recent 20:\n\n"
 
             for sig in recent:
-                emoji = "✅" if sig['status'] == 'win' else "❌" if sig['status'] == 'loss' else "⏳"
+                emoji = "+" if sig['status'] == 'win' else "-" if sig['status'] == 'loss' else "?"
                 profit_str = f"{sig['profit_pct']:+.2f}%" if sig['profit_pct'] else "Pending"
 
-                text += f"{emoji} **{sig['symbol']}** ({sig['strategy']})\n"
-                text += f"├─ Entry: ${sig['entry_price']:.4f}\n"
-                text += f"├─ P&L: {profit_str}\n"
-                text += f"├─ Hold: {sig['days_held']:.1f}d\n"
-                text += f"└─ Conf: {sig['confidence_score']:.0f}%\n\n"
+                text += f"{emoji} {sig['symbol']} ({sig['strategy']})\n"
+                text += f"Entry: ${sig['entry_price']:.4f}\n"
+                text += f"P&L: {profit_str}\n"
+                text += f"Hold: {sig['days_held']:.1f}d\n"
+                text += f"Conf: {sig['confidence_score']:.0f}%\n\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /signals error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /signals: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_signalstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /signalstats - Signal სტატისტიკა"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             stats = self.signal_history_db.get_overall_stats()
 
-            text = "📊 **Signal Statistics:**\n\n"
-            text += f"**Sent:**\n"
-            text += f"• Total: {stats['total_signals_sent']}\n"
-            text += f"• Closed: {stats['total_signals_closed']}\n"
-            text += f"• Pending: {stats['pending']}\n\n"
+            text = "Signal Statistics\n\n"
+            text += "Sent:\n"
+            text += f"Total: {stats['total_signals_sent']}\n"
+            text += f"Closed: {stats['total_signals_closed']}\n"
+            text += f"Pending: {stats['pending']}\n\n"
 
-            text += f"**Results:**\n"
-            text += f"• Win Rate: {stats['win_rate']:.1f}%\n"
-            text += f"• Wins: {stats['wins']}\n"
-            text += f"• Losses: {stats['total_signals_closed'] - stats['wins']}\n\n"
+            text += "Results:\n"
+            text += f"Win Rate: {stats['win_rate']:.1f}%\n"
+            text += f"Wins: {stats['wins']}\n"
+            text += f"Losses: {stats['total_signals_closed'] - stats['wins']}\n\n"
 
-            text += f"**Financial:**\n"
-            text += f"• Avg: {stats['avg_profit_pct']:+.2f}%\n"
-            text += f"• Total: {stats['total_profit_pct']:+.2f}%\n"
+            text += "Financial:\n"
+            text += f"Avg: {stats['avg_profit_pct']:+.2f}%\n"
+            text += f"Total: {stats['total_profit_pct']:+.2f}%\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /signalstats error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /signalstats: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_symbolstats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /symbolstats - Symbol სტატისტიკა"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         if not context.args:
-            await update.message.reply_text("📝 /symbolstats SYMBOL\n\nEx: /symbolstats BTC/USD")
+            await update.message.reply_text("Usage: /symbolstats SYMBOL\n\nEx: /symbolstats BTC/USD")
             return
 
         try:
@@ -806,37 +730,35 @@ class TelegramHandler:
             stats = self.signal_history_db.get_symbol_history(symbol)
 
             if stats['total_signals'] == 0:
-                await update.message.reply_text(f"📭 **{symbol}** - No signals")
+                await update.message.reply_text(f"{symbol} - No signals")
                 return
 
-            text = f"📊 **{symbol}**\n\n"
-            text += f"• Signals: {stats['total_signals']}\n"
-            text += f"• Win Rate: {stats['win_rate']:.1f}%\n"
-            text += f"• Wins: {stats['wins']}\n\n"
+            text = f"{symbol}\n\n"
+            text += f"Signals: {stats['total_signals']}\n"
+            text += f"Win Rate: {stats['win_rate']:.1f}%\n"
+            text += f"Wins: {stats['wins']}\n\n"
 
-            text += f"**Financial:**\n"
-            text += f"• Avg: {stats['avg_profit']:+.2f}%\n"
-            text += f"• Best: {stats['best_trade']:+.2f}%\n"
-            text += f"• Worst: {stats['worst_trade']:+.2f}%\n"
-            text += f"• Total: {stats['total_profit']:+.2f}%\n"
+            text += "Financial:\n"
+            text += f"Avg: {stats['avg_profit']:+.2f}%\n"
+            text += f"Best: {stats['best_trade']:+.2f}%\n"
+            text += f"Worst: {stats['worst_trade']:+.2f}%\n"
+            text += f"Total: {stats['total_profit']:+.2f}%\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /symbolstats error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /symbolstats: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_strategystats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /strategystats - Strategy სტატისტიკა"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         if not context.args:
             strategies = ["long_term", "swing", "scalping", "opportunistic"]
-            msg = "📝 /strategystats STRATEGY\n\n"
-            msg += "Strategies:\n"
+            msg = "Usage: /strategystats STRATEGY\n\nStrategies:\n"
             for s in strategies:
-                msg += f"• {s}\n"
+                msg += f"{s}\n"
             await update.message.reply_text(msg)
             return
 
@@ -845,43 +767,41 @@ class TelegramHandler:
             stats = self.signal_history_db.get_strategy_performance(strategy)
 
             if stats['total_signals'] == 0:
-                await update.message.reply_text(f"📭 **{strategy}** - No signals")
+                await update.message.reply_text(f"{strategy} - No signals")
                 return
 
-            text = f"📊 **{strategy.upper()}**\n\n"
-            text += f"• Signals: {stats['total_signals']}\n"
-            text += f"• Win Rate: {stats['win_rate']:.1f}%\n"
-            text += f"• Wins: {stats['wins']}\n\n"
+            text = f"{strategy.upper()}\n\n"
+            text += f"Signals: {stats['total_signals']}\n"
+            text += f"Win Rate: {stats['win_rate']:.1f}%\n"
+            text += f"Wins: {stats['wins']}\n\n"
 
-            text += f"**Financial:**\n"
-            text += f"• Avg: {stats['avg_profit_pct']:+.2f}%\n"
-            text += f"• Avg Days: {stats['avg_days_held']:.1f}\n"
+            text += "Financial:\n"
+            text += f"Avg: {stats['avg_profit_pct']:+.2f}%\n"
+            text += f"Avg Days: {stats['avg_days_held']:.1f}\n"
 
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(text))
 
         except Exception as e:
-            logger.error(f"❌ /strategystats error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /strategystats: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     async def cmd_dashboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📊 /dashboard - სრული დაშბორდი"""
         if update.effective_user.id != ADMIN_ID:
             return
 
         try:
             report = self.signal_history_db.generate_report()
-            await update.message.reply_text(report, parse_mode='Markdown')
+            await update.message.reply_text(safe_text(report))
 
         except Exception as e:
-            logger.error(f"❌ /dashboard error: {e}")
-            await update.message.reply_text(f"❌ Error: {e}")
+            logger.error(f"Error /dashboard: {e}")
+            await update.message.reply_text(f"Error: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
     # PAYMENT HANDLING
     # ═══════════════════════════════════════════════════════════════════════
 
     async def handle_payment_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """📸 გადახდის ფოტო"""
         user_id = update.effective_user.id
         username = update.effective_user.username or "User"
 
@@ -895,30 +815,27 @@ class TelegramHandler:
         self._save_json(self.payment_requests, self.payment_requests_file)
 
         await update.message.reply_text(
-            "📸 **Payment received!**\n\n"
-            "⏳ Awaiting admin approval (1-24 hours)"
+            "Payment received!\n\n"
+            "Awaiting admin approval (1-24 hours)"
         )
 
-        # Send to admin
         keyboard = [[
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
+            InlineKeyboardButton("Approve", callback_data=f"approve_{user_id}"),
+            InlineKeyboardButton("Reject", callback_data=f"reject_{user_id}")
         ]]
 
         await self.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo_id,
-            caption=f"🔄 **Payment**\n\n👤 @{username} (`{user_id}`)",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            caption=f"Payment\n\nUser @{username} ({user_id})",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """გადახდის callback"""
         query = update.callback_query
 
         if update.effective_user.id != ADMIN_ID:
-            await query.answer("❌ Unauthorized")
+            await query.answer("Unauthorized")
             return
 
         action, target_id = query.data.split("_")
@@ -928,32 +845,29 @@ class TelegramHandler:
             self.add_subscription(target_id, days=30)
 
             await query.edit_message_caption(
-                caption=f"✅ **Approved**\n\nUser: {target_id}",
-                parse_mode='Markdown'
+                caption=f"Approved\n\nUser: {target_id}"
             )
 
-            # Notify user
             try:
                 await self.bot.send_message(
                     target_id,
-                    "🎉 **Payment Approved!**\n\n"
-                    "✅ Premium activated for 30 days\n"
-                    "📊 Signals: Active\n\n"
-                    "/guide - დაიწყეთ"
+                    "Payment Approved!\n\n"
+                    "Premium activated for 30 days\n"
+                    "Signals: Active\n\n"
+                    "Get Started: /guide"
                 )
             except:
                 pass
 
-        else:  # reject
+        else:
             await query.edit_message_caption(
-                caption=f"❌ **Rejected**\n\nUser: {target_id}",
-                parse_mode='Markdown'
+                caption=f"Rejected\n\nUser: {target_id}"
             )
 
             try:
                 await self.bot.send_message(
                     target_id,
-                    "❌ **Payment Rejected**\n\n"
+                    "Payment Rejected\n\n"
                     "Please contact support"
                 )
             except:
@@ -966,11 +880,10 @@ class TelegramHandler:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def broadcast_signal(self, message: str, asset: str):
-        """სიგნალის გაგზავნა აქტიური მომხმარებელზე"""
         full_message = message + GUIDE_FOOTER
         active_users = self.get_active_subscribers()
 
-        logger.info(f"📤 Broadcasting to {len(active_users)} users: {asset}")
+        logger.info(f"Broadcasting to {len(active_users)} users: {asset}")
 
         success = 0
         failed = 0
@@ -979,8 +892,7 @@ class TelegramHandler:
             try:
                 await self.bot.send_message(
                     chat_id=user_id,
-                    text=full_message,
-                    parse_mode='Markdown'
+                    text=full_message
                 )
                 success += 1
                 await asyncio.sleep(0.05)
@@ -989,15 +901,13 @@ class TelegramHandler:
                 failed += 1
                 logger.debug(f"Send failed {user_id}: {e}")
 
-        logger.info(f"✅ Broadcast complete: {success} OK, {failed} FAILED")
+        logger.info(f"Broadcast complete: {success} OK, {failed} FAILED")
 
     # ═══════════════════════════════════════════════════════════════════════
     # HANDLERS SETUP
     # ═══════════════════════════════════════════════════════════════════════
 
     def _setup_handlers(self):
-        """ყველა ბრძანების რეგისტრაცია"""
-
         # User commands
         self.application.add_handler(CommandHandler("start", self.cmd_start))
         self.application.add_handler(CommandHandler("help", self.cmd_help))
@@ -1042,10 +952,9 @@ class TelegramHandler:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def start(self):
-        """ბოტის გაშვება"""
         async with self._start_lock:
             if self._is_running:
-                logger.warning("⚠️ Bot already running")
+                logger.warning("Bot already running")
                 return
 
             try:
@@ -1054,24 +963,22 @@ class TelegramHandler:
                 await self.application.updater.start_polling(drop_pending_updates=True)
 
                 self._is_running = True
-                logger.info("🚀 Telegram Bot v3.0 started!")
+                logger.info("Telegram Bot v3.0 started!")
 
-                # Wait for stop signal
                 self._stop_event = asyncio.Event()
                 await self._stop_event.wait()
 
             except Exception as e:
-                logger.error(f"❌ Bot error: {e}")
+                logger.error(f"Bot error: {e}")
                 self._is_running = False
                 raise
 
     async def stop(self):
-        """ბოტის შეწყვეტა"""
         if not self._is_running:
-            logger.warning("⚠️ Bot not running")
+            logger.warning("Bot not running")
             return
 
-        logger.info("🛑 Stopping bot...")
+        logger.info("Stopping bot...")
         if hasattr(self, '_stop_event'):
             self._stop_event.set()
 
@@ -1080,7 +987,7 @@ class TelegramHandler:
             await self.application.stop()
             await self.application.shutdown()
         except Exception as e:
-            logger.error(f"❌ Error during shutdown: {e}")
+            logger.error(f"Error during shutdown: {e}")
 
         self._is_running = False
-        logger.info("✅ Bot stopped")
+        logger.info("Bot stopped")
