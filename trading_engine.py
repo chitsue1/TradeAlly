@@ -1,23 +1,25 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-TRADING ENGINE v6.0 - PRODUCTION FINAL
+TRADING ENGINE v6.0 - PHASE 2 COMPLETE INTEGRATION
 ═══════════════════════════════════════════════════════════════════════════════
 
-🎯 ახალი ფიচარები:
-✅ EXIT LOGIC INTEGRATION
-✅ POSITION MONITORING (real-time)
-✅ SELL SIGNAL GENERATION
-✅ PROFIT TRACKING (100$ სიმულაცია)
-✅ PERFORMANCE ANALYTICS
+✅ Phase 1: Market Structure Integration
+✅ Phase 2: AI v2 Professional Context (15+ indicators, divergences, rich analysis)
 
-სტრუქტურა:
-1. BUY signal generation (ჩვენი სტრატეგიები)
-2. Position registration (exit handler)
-3. SELL signal generation (position monitor)
-4. Analytics recording
+RATING: 7.5/10 (Ready for Phase 3)
 
-AUTHOR: Trading System Architecture Team
-DATE: 2024-02-14
+🎯 Features:
+- Multi-source data (Yahoo, CoinGecko, Binance)
+- AI Risk Evaluator v2 with professional trading context
+- 4 strategies (Long-term, Swing, Scalping, Opportunistic)
+- Exit monitoring & SELL signals
+- Position tracking
+- Analytics & Performance monitoring
+- Divergence detection
+- Trade history learning
+
+AUTHOR: Trading System v6.0
+DATE: 2024-02-15
 """
 
 import asyncio
@@ -38,38 +40,61 @@ from strategies.scalping_strategy import ScalpingStrategy
 from strategies.opportunistic_strategy import OpportunisticStrategy
 from strategies.swing_strategy import SwingStrategy
 
-# ✅ NEW IMPORTS
+# Exit & Position Monitoring
 from exit_signals_handler import ExitSignalsHandler, ExitReason
 from sell_signal_message_generator import SellSignalMessageGenerator
 from position_monitor import PositionMonitor
 
 logger = logging.getLogger(__name__)
 
-# Import market_data
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA PROVIDER
+# ═══════════════════════════════════════════════════════════════════════════
+
 logger.info("🔍 Importing market_data...")
 try:
     from market_data import MultiSourceDataProvider
     MULTI_SOURCE_AVAILABLE = True
-    logger.info("✅ Imported successfully")
+    logger.info("✅ MultiSourceDataProvider imported")
 except Exception as e:
     MULTI_SOURCE_AVAILABLE = False
-    logger.error(f"❌ Error: {e}")
+    logger.error(f"❌ Market data import error: {e}")
 
-# Import AI
+# ═══════════════════════════════════════════════════════════════════════════
+# AI RISK EVALUATOR v2 - PHASE 2 ENHANCED
+# ═══════════════════════════════════════════════════════════════════════════
+
 try:
-    from ai_risk_evaluator import AIRiskEvaluator, AIDecision
+    from ai_risk_evaluator_v2 import (
+        AIRiskEvaluatorV2,
+        TechnicalIndicators,
+        MarketStructureContext,
+        DivergenceAnalysis,
+        MarketRegimeContext,
+        PreviousTrade,
+        AIDecision
+    )
     AI_EVALUATOR_AVAILABLE = True
-    logger.info("✅ AI Risk Evaluator imported")
-except:
+    logger.info("✅ AI Risk Evaluator v2 imported (PHASE 2)")
+except Exception as e:
     AI_EVALUATOR_AVAILABLE = False
-    logger.warning("⚠️ AI not found")
+    logger.warning(f"⚠️ AI v2 not found: {e}")
+
+# Divergence Detector (PHASE 2)
+try:
+    from divergence_detector import DivergenceDetector
+    DIVERGENCE_AVAILABLE = True
+    logger.info("✅ Divergence detector imported")
+except:
+    DIVERGENCE_AVAILABLE = False
+    logger.warning("⚠️ Divergence detector not available")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # POSITION CLASS
 # ═══════════════════════════════════════════════════════════════════════════
 
 class Position:
-    """აქტიური position მონაცემი"""
+    """Active position data"""
     def __init__(self, symbol, entry_price, strategy_type, signal_id=None):
         self.symbol = symbol
         self.entry_price = entry_price
@@ -79,20 +104,21 @@ class Position:
         self.buy_signals_sent = 1
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TRADING ENGINE v6.0
+# TRADING ENGINE v6.0 - PHASE 2 COMPLETE
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TradingEngine:
     """
-    TRADING ENGINE v6.0
+    TRADING ENGINE v6.0 - PHASE 2 COMPLETE
 
-    ✅ სრული cycle: BUY → HOLD → SELL
+    ✅ Full BUY → HOLD → SELL cycle
+    ✅ AI v2 with professional context
     ✅ Real-time position monitoring
-    ✅ Profit tracking
+    ✅ Profit tracking & analytics
     """
 
     def __init__(self):
-        logger.info("🔧 TradingEngine v6.0 initializing...")
+        logger.info("🔧 TradingEngine v6.0 (Phase 2) initializing...")
 
         # ════════════════════════════════════════════════════════════════════
         # CORE COMPONENTS
@@ -101,8 +127,6 @@ class TradingEngine:
         self.telegram_handler = None
         self.analytics_db = AnalyticsDatabase("trading_analytics.db")
         self.dashboard = AnalyticsDashboard(self.analytics_db)
-
-        # ✅ NEW: Exit handler
         self.exit_handler = ExitSignalsHandler()
 
         # ════════════════════════════════════════════════════════════════════
@@ -121,13 +145,13 @@ class TradingEngine:
                     alpaca_secret=ALPACA_SECRET_KEY
                 )
                 self.use_multi_source = True
-                logger.info("✅ Data provider created")
+                logger.info("✅ Data provider ready")
             except Exception as e:
-                logger.error(f"❌ Provider failed: {e}")
+                logger.error(f"❌ Provider init failed: {e}")
                 self.use_multi_source = False
 
         # ════════════════════════════════════════════════════════════════════
-        # AI RISK EVALUATOR
+        # AI RISK EVALUATOR v2 (PHASE 2)
         # ════════════════════════════════════════════════════════════════════
 
         self.ai_enabled = False
@@ -135,12 +159,22 @@ class TradingEngine:
 
         if AI_EVALUATOR_AVAILABLE and AI_RISK_ENABLED and ANTHROPIC_API_KEY and len(ANTHROPIC_API_KEY) > 20:
             try:
-                logger.info("🧠 Creating AI...")
-                self.ai_evaluator = AIRiskEvaluator(api_key=ANTHROPIC_API_KEY)
+                logger.info("🧠 Initializing AI Risk Evaluator v2...")
+                self.ai_evaluator = AIRiskEvaluatorV2(api_key=ANTHROPIC_API_KEY)
                 self.ai_enabled = True
-                logger.info("✅ AI ready")
+                logger.info("✅ AI v2 ready - Professional trading context enabled")
             except Exception as e:
-                logger.error(f"❌ AI failed: {e}")
+                logger.error(f"❌ AI v2 initialization failed: {e}")
+                self.ai_enabled = False
+        else:
+            logger.warning("⚠️ AI disabled - Check: AI_RISK_ENABLED, ANTHROPIC_API_KEY")
+
+        # Divergence detector (PHASE 2)
+        self.divergence_detector = DivergenceDetector() if DIVERGENCE_AVAILABLE else None
+
+        # Price history for divergence tracking (PHASE 2)
+        self._price_history = {}  # {symbol: [{'price': x, 'rsi': y, 'macd': z, 'time': t}]}
+        self._max_price_history = 20
 
         # ════════════════════════════════════════════════════════════════════
         # ANALYSIS COMPONENTS
@@ -166,11 +200,8 @@ class TradingEngine:
         self.volume_history = {}
         self.max_volume_history = 20
 
-        # ════════════════════════════════════════════════════════════════════
-        # ✅ POSITION MONITOR
-        # ════════════════════════════════════════════════════════════════════
-
-        self.position_monitor = None  # Will be created after telegram_handler set
+        # Position monitor (initialized after telegram_handler set)
+        self.position_monitor = None
 
         # ════════════════════════════════════════════════════════════════════
         # STATISTICS
@@ -198,10 +229,11 @@ class TradingEngine:
         }
 
         logger.info(
-            f"✅ Engine v6.0 ready | "
-            f"Data: {'✅' if self.use_multi_source else '❌'} | "
-            f"AI: {'✅' if self.ai_enabled else '❌'} | "
-            f"Exit Handler: ✅"
+            f"✅ Engine v6.0 (Phase 2) ready\n"
+            f"   Data: {'✅' if self.use_multi_source else '❌'}\n"
+            f"   AI v2: {'✅' if self.ai_enabled else '❌'}\n"
+            f"   Divergence: {'✅' if self.divergence_detector else '❌'}\n"
+            f"   Exit Handler: ✅"
         )
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -209,17 +241,17 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     def set_telegram_handler(self, handler):
-        """Telegram handler დაკავშირება"""
+        """Link telegram handler"""
         self.telegram_handler = handler
 
-        # ✅ ახლა შეგვიძლია Position Monitor გავაშვოთ
+        # Initialize position monitor
         if not self.position_monitor:
             self.position_monitor = PositionMonitor(
                 exit_handler=self.exit_handler,
                 data_provider=self.data_provider,
                 telegram_handler=self.telegram_handler,
                 analytics_db=self.analytics_db,
-                scan_interval=30  # თითოეული 30 წამი ზეწნა
+                scan_interval=30
             )
 
         logger.info("✅ Telegram linked + Position Monitor created")
@@ -229,7 +261,7 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     def load_positions(self) -> Dict:
-        """აქტიური positions ჩატვირთვა"""
+        """Load active positions from file"""
         if os.path.exists(self.positions_file):
             try:
                 with open(self.positions_file, 'r') as f:
@@ -250,7 +282,7 @@ class TradingEngine:
         return {}
 
     def save_positions(self):
-        """აქტიური positions შენახვა"""
+        """Save active positions to file"""
         try:
             data = {}
             for symbol, pos in self.active_positions.items():
@@ -268,11 +300,31 @@ class TradingEngine:
             logger.error(f"❌ Failed to save positions: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
+    # PRICE HISTORY TRACKING (PHASE 2 - for divergence detection)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _update_price_history(self, symbol: str, price: float, rsi: float, macd_hist: float):
+        """Track price history for divergence detection"""
+        if symbol not in self._price_history:
+            self._price_history[symbol] = []
+
+        self._price_history[symbol].append({
+            'price': price,
+            'rsi': rsi,
+            'macd_histogram': macd_hist,
+            'time': datetime.now().isoformat()
+        })
+
+        # Keep only last N records
+        if len(self._price_history[symbol]) > self._max_price_history:
+            self._price_history[symbol].pop(0)
+
+    # ═══════════════════════════════════════════════════════════════════════
     # TIER DETECTION
     # ═══════════════════════════════════════════════════════════════════════
 
     def get_tier(self, symbol: str) -> str:
-        """ტიერის განსაზღვრა"""
+        """Determine asset tier"""
         if symbol in TIER_1_BLUE_CHIPS:
             return "BLUE_CHIP"
         elif symbol in TIER_2_HIGH_GROWTH:
@@ -290,7 +342,7 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def fetch_data(self, symbol: str) -> Optional[Dict]:
-        """ბაზარი მონაცემი მიღება"""
+        """Fetch market data from provider"""
 
         if not self.use_multi_source or not self.data_provider:
             return None
@@ -334,7 +386,7 @@ class TradingEngine:
             return None
 
     def _get_simulated_volume(self, symbol: str) -> float:
-        """Volume სიმულაცია"""
+        """Simulate volume"""
         vol = 1000000 * np.random.uniform(0.5, 2.5)
 
         if symbol not in self.volume_history:
@@ -348,7 +400,7 @@ class TradingEngine:
         return vol
 
     def _get_avg_volume(self, symbol: str) -> float:
-        """საშუალო volume"""
+        """Get average volume"""
         if symbol not in self.volume_history or not self.volume_history[symbol]:
             return 1000000
         return np.mean(self.volume_history[symbol])
@@ -358,33 +410,42 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def send_buy_signal(self, signal, ai_eval=None):
-        """BUY signal გაგზავნა + Position registration"""
+        """Send BUY signal with AI v2 insights"""
 
         if not self.telegram_handler:
             return
 
         try:
-            # Generate message
+            # Generate base message
             message = signal.to_message()
 
-            # ✅ AI ქართული message
+            # ✅ AI v2 insights (PHASE 2)
             if ai_eval:
-                message += f"\n\n🧠 **AI შეფასება: {ai_eval.adjusted_confidence:.0f}%**\n"
+                message += f"\n\n🧠 **AI შეფასება v2:**\n"
+                message += f"├─ Claude Confidence: {ai_eval.claude_confidence:.0f}%\n"
+                message += f"├─ Adjustment: {ai_eval.confidence_adjustment:+d}%\n"
+                message += f"└─ R:R: 1:{ai_eval.risk_reward_ratio:.2f}\n"
 
-                if ai_eval.decision.value == "APPROVE":
-                    message += "✅ ძლიერი სიგნალი - შედი ახლავე\n"
-                elif ai_eval.decision.value == "APPROVE_WITH_CAUTION":
-                    message += "⚠️ სიფრთხილით - რისკი საშუალო\n"
+                if ai_eval.decision == "APPROVE":
+                    message += "\n✅ **AI რეკომენდაცია: ძლიერი შესვლა**\n"
+                elif ai_eval.decision == "CAUTION":
+                    message += "\n⚠️ **AI რეკომენდაცია: სიფრთხილით**\n"
 
+                # Red flags (max 2)
                 if ai_eval.red_flags:
-                    message += "\n🔴 გაფრთხილება:\n"
+                    message += "\n🔴 **გაფრთხილება:**\n"
                     for flag in ai_eval.red_flags[:2]:
                         message += f"• {flag}\n"
 
+                # Green flags (max 2)
                 if ai_eval.green_flags:
-                    message += "\n🟢 დადებითი:\n"
+                    message += "\n🟢 **დადებითი:**\n"
                     for flag in ai_eval.green_flags[:2]:
                         message += f"• {flag}\n"
+
+                # Professional notes
+                if ai_eval.trader_notes:
+                    message += f"\n💡 **პროფესიონალის შენიშვნა:**\n{ai_eval.trader_notes[:150]}\n"
 
             if not message:
                 return
@@ -396,7 +457,7 @@ class TradingEngine:
                 logger.error(f"❌ Failed to record signal: {e}")
                 signal_id = None
 
-            # ✅ NEW: Register position in exit handler
+            # Register position in exit handler
             self.exit_handler.register_position(
                 symbol=signal.symbol,
                 entry_price=signal.entry_price,
@@ -408,7 +469,7 @@ class TradingEngine:
                 expected_profit_max=signal.expected_profit_max,
                 strategy_type=signal.strategy_type.value,
                 signal_id=signal_id,
-                ai_approved=(ai_eval is not None and ai_eval.decision.value == "APPROVE")
+                ai_approved=(ai_eval is not None and ai_eval.decision == "APPROVE")
             )
 
             # Send to Telegram
@@ -439,25 +500,22 @@ class TradingEngine:
             logger.error(f"❌ Failed to send signal: {e}")
 
     async def send_sell_signal(self, symbol: str, exit_analysis):
-        """SELL signal გაგზავნა"""
+        """Send SELL signal"""
 
         if not self.telegram_handler:
             return
 
         try:
-            # Generate message
             message = SellSignalMessageGenerator.generate_sell_message(
                 symbol=symbol,
                 exit_analysis=exit_analysis
             )
 
-            # Send to Telegram
             await self.telegram_handler.broadcast_signal(
                 message=message,
                 asset=symbol
             )
 
-            # Update stats
             self.stats['total_signals'] += 1
             self.stats['sell_signals'] += 1
 
@@ -467,32 +525,27 @@ class TradingEngine:
             logger.error(f"❌ Failed to send SELL signal: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # MARKET SCANNING
+    # MARKET SCANNING - PHASE 2 ENHANCED
     # ═══════════════════════════════════════════════════════════════════════
 
     async def scan_market(self, all_assets: List[str]):
-        """ბაზარი სკანირება ყველა აქტივზე - OPTIMIZED AI USAGE"""
+        """Scan market with AI v2 professional context"""
 
         logger.info("=" * 70)
         logger.info(
             f"🔍 SCAN | Assets: {len(all_assets)} | "
             f"Data: {'✅' if self.use_multi_source else '❌'} | "
-            f"AI: {'✅' if self.ai_enabled else '❌'}"
+            f"AI v2: {'✅' if self.ai_enabled else '❌'}"
         )
         logger.info("=" * 70)
 
         if not self.use_multi_source:
             logger.error("❌ ABORTED - No data provider")
-            logger.info("=" * 70)
-            logger.info("✅ DONE (0.0min)")
-            logger.info("📊 Success: 0/57 | Fail: 57")
-            logger.info("=" * 70)
             return
 
         start = time.time()
         success = fail = signals_generated = signals_sent = ai_rejected = 0
 
-        # ✅ NEW: Min confidence for AI evaluation
         MIN_CONFIDENCE_FOR_AI = 55
 
         for symbol in all_assets:
@@ -549,10 +602,18 @@ class TradingEngine:
                     data['macd_histogram']
                 )
 
+                # ✅ Update price history (PHASE 2)
+                self._update_price_history(
+                    symbol, 
+                    data['price'], 
+                    technical['rsi'],
+                    technical['macd_histogram']
+                )
+
                 tier = self.get_tier(symbol)
 
                 # ════════════════════════════════════════════════════════════
-                # 4. STRATEGY ANALYSIS (NO API CALLS)
+                # 4. STRATEGY ANALYSIS
                 # ════════════════════════════════════════════════════════════
 
                 best_signal = None
@@ -569,96 +630,273 @@ class TradingEngine:
                         market_structure
                     )
 
-                    # ✅ Keep only BEST signal per symbol
                     if signal and signal.confidence_score > best_confidence:
                         best_signal = signal
                         best_confidence = signal.confidence_score
 
-                if best_signal:
-                    signals_generated += 1
+                if not best_signal:
+                    continue
 
-                    # ════════════════════════════════════════════════════════
-                    # 5. FILTER BEFORE AI (SAVE API CREDITS!)
-                    # ════════════════════════════════════════════════════════
+                signals_generated += 1
 
-                    # ✅ FILTER 1: Confidence check
-                    if best_signal.confidence_score < MIN_CONFIDENCE_FOR_AI:
-                        logger.debug(
-                            f"⏭️ {symbol}: Confidence low ({best_signal.confidence_score:.0f}%)"
-                        )
-                        continue
+                # ════════════════════════════════════════════════════════════
+                # 5. PRE-AI FILTERING
+                # ════════════════════════════════════════════════════════════
 
-                    # ✅ FILTER 2: Strategy says send?
-                    strategy_instance = next(
-                        (s for s in self.strategies 
-                         if s.strategy_type == best_signal.strategy_type),
-                        None
+                if best_signal.confidence_score < MIN_CONFIDENCE_FOR_AI:
+                    logger.debug(
+                        f"⏭️ {symbol}: Confidence low ({best_signal.confidence_score:.0f}%)"
+                    )
+                    continue
+
+                strategy_instance = next(
+                    (s for s in self.strategies 
+                     if s.strategy_type == best_signal.strategy_type),
+                    None
+                )
+
+                if strategy_instance:
+                    should_send, reason = strategy_instance.should_send_signal(
+                        symbol, best_signal
                     )
 
-                    if strategy_instance:
-                        should_send, reason = strategy_instance.should_send_signal(
-                            symbol, best_signal
+                    if not should_send:
+                        logger.debug(f"⏭️ {symbol}: Strategy NO - {reason}")
+                        continue
+
+                # ════════════════════════════════════════════════════════════
+                # 6. AI v2 EVALUATION (PHASE 2 - RICH CONTEXT)
+                # ════════════════════════════════════════════════════════════
+
+                ai_eval = None
+
+                if self.ai_enabled and self.ai_evaluator:
+                    logger.info(f"🧠 {symbol}: AI v2 evaluating ({best_signal.confidence_score:.0f}%)...")
+
+                    try:
+                        # ════════════════════════════════════════════════════
+                        # Prepare TechnicalIndicators (15+ indicators)
+                        # ════════════════════════════════════════════════════
+
+                        bb_range = technical['bb_high'] - technical['bb_low']
+                        bb_position = (data['price'] - technical['bb_low']) / bb_range if bb_range > 0 else 0.5
+
+                        indicators = TechnicalIndicators(
+                            rsi=technical['rsi'],
+                            ema50=technical['ema50'],
+                            ema200=technical['ema200'],
+                            ema_distance_pct=((technical['ema50'] - technical['ema200']) / technical['ema200']) * 100,
+                            macd=technical['macd'],
+                            macd_signal=technical['macd_signal'],
+                            macd_histogram=technical['macd_histogram'],
+                            bb_low=technical['bb_low'],
+                            bb_mid=technical['bb_mid'],
+                            bb_high=technical['bb_high'],
+                            bb_position=bb_position,
+                            volume=technical['volume'],
+                            avg_volume_20d=technical['avg_volume_20d'],
+                            volume_ratio=technical['volume'] / technical['avg_volume_20d'] if technical['avg_volume_20d'] > 0 else 1.0,
+                            atr=technical.get('atr', bb_range / 2)  # Approximate ATR
                         )
 
-                        if not should_send:
-                            logger.debug(f"⏭️ {symbol}: Strategy NO - {reason}")
-                            continue
+                        # ════════════════════════════════════════════════════
+                        # Prepare MarketStructureContext
+                        # ════════════════════════════════════════════════════
 
-                    # ════════════════════════════════════════════════════════
-                    # 6. AI EVALUATION (ONLY FOR PROMISING SIGNALS!)
-                    # ════════════════════════════════════════════════════════
+                        market_structure_context = MarketStructureContext(
+                            nearest_support=market_structure.nearest_support,
+                            nearest_resistance=market_structure.nearest_resistance,
+                            support_strength=market_structure.support_strength,
+                            resistance_strength=market_structure.resistance_strength,
+                            support_distance_pct=market_structure.support_distance_pct,
+                            resistance_distance_pct=market_structure.resistance_distance_pct,
+                            volume_trend=market_structure.volume_trend,
+                            structure_quality=market_structure.structure_quality
+                        )
 
-                    ai_eval = None
+                        # ════════════════════════════════════════════════════
+                        # Detect Divergences (PHASE 2)
+                        # ════════════════════════════════════════════════════
 
-                    if self.ai_enabled and self.ai_evaluator:
-                        logger.info(f"🧠 {symbol}: AI evaluating ({best_signal.confidence_score:.0f}%)...")
-                        try:
-                            ai_eval = await self.ai_evaluator.evaluate_signal(
-                                symbol=symbol,
-                                strategy_type=best_signal.strategy_type.value,
-                                entry_price=best_signal.entry_price,
-                                strategy_confidence=best_signal.confidence_score,
-                                indicators=technical,
-                                market_structure={
-                                    'nearest_support': market_structure.nearest_support,
-                                    'nearest_resistance': market_structure.nearest_resistance,
-                                    'volume_trend': market_structure.volume_trend
-                                },
-                                regime=regime.regime.value,
-                                tier=tier
+                        rsi_divergence = False
+                        rsi_strength = 0
+                        macd_divergence = False
+                        macd_strength = 0
+                        price_volume_divergence = False
+
+                        if self.divergence_detector and symbol in self._price_history and len(self._price_history[symbol]) >= 3:
+                            hist = self._price_history[symbol]
+
+                            # Extract lists
+                            prices = [h['price'] for h in hist]
+                            rsi_values = [h['rsi'] for h in hist]
+                            macd_hists = [h['macd_histogram'] for h in hist]
+
+                            # RSI divergence
+                            rsi_result = self.divergence_detector.detect_rsi_divergence(prices, rsi_values)
+                            if rsi_result.has_divergence and rsi_result.divergence_type == 'bullish':
+                                rsi_divergence = True
+                                rsi_strength = rsi_result.strength
+
+                            # MACD divergence
+                            macd_result = self.divergence_detector.detect_macd_divergence(prices, macd_hists)
+                            if macd_result.has_divergence and macd_result.divergence_type == 'bullish':
+                                macd_divergence = True
+                                macd_strength = macd_result.strength
+
+                            # Price-volume divergence
+                            volumes = [technical['volume']] * len(prices)  # Simplified
+                            pv_result = self.divergence_detector.detect_price_volume_divergence(prices, volumes)
+                            price_volume_divergence = pv_result.has_divergence
+
+                        divergences = DivergenceAnalysis(
+                            rsi_bullish_divergence=rsi_divergence,
+                            rsi_bullish_strength=rsi_strength,
+                            macd_bullish_divergence=macd_divergence,
+                            macd_bullish_strength=macd_strength,
+                            price_volume_divergence=price_volume_divergence,
+                            divergence_type='bullish' if (rsi_divergence or macd_divergence) else None
+                        )
+
+                        # ════════════════════════════════════════════════════
+                        # Prepare MarketRegimeContext
+                        # ════════════════════════════════════════════════════
+
+                        regime_context = MarketRegimeContext(
+                            regime=regime.regime.value,
+                            volatility_percentile=regime.volatility_percentile,
+                            volume_trend=market_structure.volume_trend,
+                            warning_flags=regime.warning_flags
+                        )
+
+                        # ════════════════════════════════════════════════════
+                        # Get Previous Trades (Learning Loop)
+                        # ════════════════════════════════════════════════════
+
+                        previous_trades = []
+
+                        if hasattr(self.ai_evaluator, 'trade_history') and self.ai_evaluator.trade_history:
+                            similar = [
+                                PreviousTrade(
+                                    symbol=t.symbol,
+                                    entry_price=t.entry_price,
+                                    exit_price=t.exit_price,
+                                    profit_pct=t.profit_pct,
+                                    days_held=int(t.days_held),
+                                    strategy=t.strategy,
+                                    market_regime=t.market_regime,
+                                    similarity_score=t.similarity_score
+                                )
+                                for t in self.ai_evaluator.trade_history[-10:]
+                                if t.symbol == symbol or t.strategy == best_signal.strategy_type.value
+                            ]
+                            previous_trades = similar[:5]
+
+                        # ════════════════════════════════════════════════════
+                        # 🧠 CALL AI v2 - PROFESSIONAL EVALUATION
+                        # ════════════════════════════════════════════════════
+
+                        ai_decision = await self.ai_evaluator.evaluate_signal(
+                            symbol=symbol,
+                            strategy_type=best_signal.strategy_type.value,
+                            entry_price=best_signal.entry_price,
+                            strategy_confidence=best_signal.confidence_score,
+                            indicators=indicators,
+                            market_structure=market_structure_context,
+                            divergences=divergences,
+                            regime=regime_context,
+                            previous_trades=previous_trades,
+                            tier=tier
+                        )
+
+                        # ════════════════════════════════════════════════════
+                        # Process AI Decision
+                        # ════════════════════════════════════════════════════
+
+                        logger.info(
+                            f"🧠 {symbol}: AI Decision: {ai_decision.decision}\n"
+                            f"   Claude Confidence: {ai_decision.claude_confidence:.0f}%\n"
+                            f"   Adjustment: {ai_decision.confidence_adjustment:+d}%\n"
+                            f"   R:R: 1:{ai_decision.risk_reward_ratio:.2f}\n"
+                            f"   Red Flags: {len(ai_decision.red_flags)}\n"
+                            f"   Green Flags: {len(ai_decision.green_flags)}"
+                        )
+
+                        if ai_decision.decision == "APPROVE":
+                            adjusted_confidence = min(
+                                best_signal.confidence_score + ai_decision.confidence_adjustment,
+                                100
                             )
 
-                            ai_should_send, ai_reason = (
-                                self.ai_evaluator.should_send_signal(ai_eval)
+                            if ai_decision.recommended_stop_loss > 0:
+                                best_signal.stop_loss_price = ai_decision.recommended_stop_loss
+
+                            if ai_decision.recommended_target_price > 0:
+                                best_signal.target_price = ai_decision.recommended_target_price
+
+                            best_signal.confidence_score = adjusted_confidence
+
+                            if ai_decision.green_flags:
+                                best_signal.supporting_reasons.extend(ai_decision.green_flags[:2])
+
+                            if ai_decision.red_flags:
+                                best_signal.risk_factors.extend(ai_decision.red_flags[:2])
+
+                            signals_sent += 1
+                            self.stats['ai_approved'] += 1
+
+                            logger.info(f"✅ {symbol}: AI APPROVED - Sending signal")
+
+                            ai_eval = ai_decision
+                            await self.send_buy_signal(best_signal, ai_eval)
+
+                            if strategy_instance:
+                                strategy_instance.record_activity()
+
+                        elif ai_decision.decision == "CAUTION":
+                            best_signal.risk_level = "HIGH"
+                            best_signal.confidence_score = max(
+                                best_signal.confidence_score + ai_decision.confidence_adjustment,
+                                45
                             )
 
-                            if ai_should_send:
-                                signals_sent += 1
-                                self.stats['ai_approved'] += 1
-                                logger.info(f"✅ {symbol}: AI APPROVED")
-                                await self.send_buy_signal(best_signal, ai_eval)
-                                if strategy_instance:
-                                    strategy_instance.record_activity()
-                            else:
-                                ai_rejected += 1
-                                self.stats['ai_rejected'] += 1
-                                logger.info(f"❌ {symbol}: AI REJECTED - {ai_reason}")
+                            signals_sent += 1
+                            self.stats['ai_approved'] += 1
 
-                        except Exception as e:
-                            logger.error(f"❌ AI error: {e}")
-                            # Fallback: send anyway if high confidence
-                            if best_signal.confidence_score >= 70:
-                                signals_sent += 1
-                                await self.send_buy_signal(best_signal)
-                                if strategy_instance:
-                                    strategy_instance.record_activity()
-                    else:
-                        # AI disabled - send high-confidence signals
-                        if best_signal.confidence_score >= 65:
+                            logger.warning(f"⚠️ {symbol}: AI CAUTION - Sending with warning")
+
+                            ai_eval = ai_decision
+                            await self.send_buy_signal(best_signal, ai_eval)
+
+                        else:  # REJECT
+                            ai_rejected += 1
+                            self.stats['ai_rejected'] += 1
+
+                            logger.info(
+                                f"❌ {symbol}: AI REJECTED\n"
+                                f"   Reason: {ai_decision.reasoning[:100]}\n"
+                                f"   Red Flags: {', '.join(ai_decision.red_flags[:3])}"
+                            )
+
+                    except Exception as e:
+                        logger.error(f"❌ AI v2 error for {symbol}: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+
+                        # Fallback
+                        if best_signal.confidence_score >= 70:
                             signals_sent += 1
                             await self.send_buy_signal(best_signal)
                             if strategy_instance:
                                 strategy_instance.record_activity()
+
+                else:
+                    # AI disabled
+                    if best_signal.confidence_score >= 65:
+                        signals_sent += 1
+                        await self.send_buy_signal(best_signal)
+                        if strategy_instance:
+                            strategy_instance.record_activity()
 
                 await asyncio.sleep(ASSET_DELAY)
 
@@ -687,15 +925,15 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def run_forever(self):
-        """ძირითადი loop - თითოეული scan-ის შემდეგ position monitor გაშვება"""
+        """Main trading loop with position monitoring"""
 
         all_assets = CRYPTO + STOCKS + COMMODITIES
 
         logger.info(
             f"""
 ╔════════════════════════════════════════╗
-║  ENGINE v6.0 PRODUCTION               ║
-║  Data: {'ACTIVE' if self.use_multi_source else 'INACTIVE'} | AI: {'ACTIVE' if self.ai_enabled else 'INACTIVE'}
+║  ENGINE v6.0 PHASE 2 PRODUCTION       ║
+║  Data: {'ACTIVE' if self.use_multi_source else 'INACTIVE'} | AI v2: {'ACTIVE' if self.ai_enabled else 'INACTIVE'}
 ║  Assets: {len(all_assets)} | Strategies: {len(self.strategies)}
 ║  Exit Handler: ✅
 ║  Position Monitor: {'✅ READY' if self.position_monitor else '❌ PENDING'}
@@ -703,10 +941,10 @@ class TradingEngine:
             """
         )
 
-        # ✅ START POSITION MONITOR
+        # Start position monitor
         if self.position_monitor:
             await self.position_monitor.start_monitoring()
-            logger.info("✅ Position Monitor დაიწყო")
+            logger.info("✅ Position Monitor started")
         else:
             logger.warning("⚠️ Position Monitor not initialized")
 
@@ -717,15 +955,11 @@ class TradingEngine:
                 scan_count += 1
                 logger.info(f"\n🔄 SCAN #{scan_count}")
 
-                # Market scan
                 await self.scan_market(all_assets)
-
-                # Position monitor is running in background
-                # მას აქვს თავი საკუთარი async task
 
                 logger.info(
                     f"⏸️ Next scan in {SCAN_INTERVAL/60:.0f}min... "
-                    f"(Position Monitor აკვლია background-ში)"
+                    f"(Position Monitor running in background)"
                 )
 
                 await asyncio.sleep(SCAN_INTERVAL)
@@ -742,7 +976,7 @@ class TradingEngine:
     # ═══════════════════════════════════════════════════════════════════════
 
     def _generate_mock_price_history(self, current_price: float, length: int):
-        """ფასის ისტორია სიმულაცია"""
+        """Generate mock price history for analysis"""
         returns = np.random.normal(0, 0.02, length - 1)
         prices = [current_price]
 
@@ -751,22 +985,19 @@ class TradingEngine:
 
         return np.array(prices)
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # STATUS COMMANDS
-    # ═══════════════════════════════════════════════════════════════════════
-
     def get_engine_status(self) -> str:
-        """Engine status"""
+        """Get engine status report"""
 
         active_pos = len(self.active_positions)
         exit_stats = self.exit_handler.get_exit_statistics()
 
         status = f"""
-📊 **ENGINE STATUS**
+📊 **ENGINE STATUS v6.0 (Phase 2)**
 
 **Components:**
 ├─ Data Provider: {'✅' if self.use_multi_source else '❌'}
-├─ AI Evaluator: {'✅' if self.ai_enabled else '❌'}
+├─ AI Evaluator v2: {'✅' if self.ai_enabled else '❌'}
+├─ Divergence Detector: {'✅' if self.divergence_detector else '❌'}
 ├─ Exit Handler: ✅
 └─ Position Monitor: {'✅ Running' if self.position_monitor and self.position_monitor.is_monitoring else '❌'}
 
@@ -779,6 +1010,7 @@ class TradingEngine:
 ├─ Total Signals: {self.stats['total_signals']}
 ├─ Buy: {self.stats['buy_signals']} | Sell: {self.stats['sell_signals']}
 ├─ AI Approved: {self.stats['ai_approved']} | Rejected: {self.stats['ai_rejected']}
+└─ AI Rejection Rate: {(self.stats['ai_rejected'] / max(1, self.stats['ai_approved'] + self.stats['ai_rejected']) * 100):.1f}%
 """
 
         return status
