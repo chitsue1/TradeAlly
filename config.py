@@ -14,9 +14,12 @@ TRADE ALLY BOT - CONFIG v3.0 PRODUCTION
 
 import os
 import logging
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # Railway-ზე dotenv არ სჭირდება — env vars dashboard-ში იწერება
 
 logger = logging.getLogger(__name__)
 
