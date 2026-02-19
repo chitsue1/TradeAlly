@@ -1,95 +1,311 @@
 """
-AI Trading Bot - Configuration - PRODUCTION FINAL
-✅ 57 კრიპტოვალუტა
-✅ AI Risk Intelligence
+═══════════════════════════════════════════════════════════════════════════════
+TRADE ALLY BOT - CONFIG v3.0 PRODUCTION
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ გაუმჯობესებები:
+- ყველა token/key env variable-ში (hardcode აღარ)
+- Tier-based risk thresholds
+- Signal quality gates
+- ATR-based stop/target multipliers
+- Daily signal limits per tier
+═══════════════════════════════════════════════════════════════════════════════
 """
+
 import os
+import logging
+from dotenv import load_dotenv
 
-# TELEGRAM
-TELEGRAM_TOKEN = "8247808058:AAGBsRWw8UOoZHMoulK6dGv-QI5L6A9f9rA"
-ADMIN_ID = 6564836899
+load_dotenv()
 
-# API KEYS
-TWELVE_DATA_API_KEY = "c512e8ccb9ae4637a613152481546749"
-ALPACA_API_KEY = None
-ALPACA_SECRET_KEY = None
+logger = logging.getLogger(__name__)
 
-# ✅ AI - ჩაწერე შენი API Key
-import os
-ANTHROPIC_API_KEY = os.environ['ANTHROPIC_API_KEY']
-AI_RISK_ENABLED = True
+# ═══════════════════════════════════════════════════════════════════════════
+# CREDENTIALS — ყველა env-დან (NEVER hardcode!)
+# ═══════════════════════════════════════════════════════════════════════════
 
-# CRYPTO (57)
-TIER_1_BLUE_CHIPS = ["BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD", "ADA/USD", "AVAX/USD", "LINK/USD", "MATIC/USD", "DOT/USD", "TRX/USD", "LTC/USD", "XLM/USD", "ETC/USD"]
-TIER_2_HIGH_GROWTH = ["NEAR/USD", "ARB/USD", "OP/USD", "SUI/USD", "INJ/USD", "APT/USD", "UNI/USD", "ATOM/USD", "FTM/USD", "KAS/USD", "RUNE/USD", "EGLD/USD", "MINA/USD"]
-TIER_3_MEME_COINS = ["DOGE/USD", "PEPE/USD", "WIF/USD", "BONK/USD", "FLOKI/USD", "BRETT/USD", "POPCAT/USD", "BOME/USD", "MYRO/USD"]
-TIER_4_NARRATIVE = ["RNDR/USD", "FET/USD", "AGIX/USD", "GALA/USD", "IMX/USD", "ONDO/USD", "CFG/USD", "AKT/USD", "TAO/USD", "PIXEL/USD"]
-TIER_5_EMERGING = ["SEI/USD", "TIA/USD", "STRK/USD", "BCH/USD", "TON/USD", "PYTH/USD", "JTO/USD", "DYM/USD", "ZK/USD", "AEVO/USD"]
-CRYPTO = TIER_1_BLUE_CHIPS + TIER_2_HIGH_GROWTH + TIER_3_MEME_COINS + TIER_4_NARRATIVE + TIER_5_EMERGING
-STOCKS = []
+TELEGRAM_TOKEN      = os.environ.get("TELEGRAM_TOKEN", "")
+ADMIN_ID            = int(os.environ.get("ADMIN_ID", "0"))
+ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY", "")
+AI_RISK_ENABLED     = os.environ.get("AI_RISK_ENABLED", "true").lower() == "true"
+
+# Legacy compat
+TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
+ALPACA_API_KEY      = os.environ.get("ALPACA_API_KEY", None)
+ALPACA_SECRET_KEY   = os.environ.get("ALPACA_SECRET_KEY", None)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ASSET UNIVERSE — 57 კრიპტო, 5 Tier
+# ═══════════════════════════════════════════════════════════════════════════
+
+TIER_1_BLUE_CHIPS = [
+    "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD",
+    "XRP/USD", "ADA/USD", "AVAX/USD", "LINK/USD",
+    "MATIC/USD", "DOT/USD", "TRX/USD", "LTC/USD",
+    "XLM/USD", "ETC/USD"
+]
+
+TIER_2_HIGH_GROWTH = [
+    "NEAR/USD", "ARB/USD", "OP/USD", "SUI/USD",
+    "INJ/USD", "APT/USD", "UNI/USD", "ATOM/USD",
+    "FTM/USD", "KAS/USD", "RUNE/USD", "EGLD/USD",
+    "MINA/USD"
+]
+
+TIER_3_MEME_COINS = [
+    "DOGE/USD", "PEPE/USD", "WIF/USD", "BONK/USD",
+    "FLOKI/USD", "BRETT/USD", "POPCAT/USD", "BOME/USD",
+    "MYRO/USD"
+]
+
+TIER_4_NARRATIVE = [
+    "RNDR/USD", "FET/USD", "AGIX/USD", "GALA/USD",
+    "IMX/USD", "ONDO/USD", "CFG/USD", "AKT/USD",
+    "TAO/USD", "PIXEL/USD"
+]
+
+TIER_5_EMERGING = [
+    "SEI/USD", "TIA/USD", "STRK/USD", "BCH/USD",
+    "TON/USD", "PYTH/USD", "JTO/USD", "DYM/USD",
+    "ZK/USD", "AEVO/USD"
+]
+
+CRYPTO      = TIER_1_BLUE_CHIPS + TIER_2_HIGH_GROWTH + TIER_3_MEME_COINS + TIER_4_NARRATIVE + TIER_5_EMERGING
+STOCKS      = []
 COMMODITIES = []
 
-# PARAMETERS
-INTERVAL = "1h"
-SCAN_INTERVAL = 900
-ASSET_DELAY = 2
-NOTIFICATION_COOLDOWN = 1800
-STOP_LOSS_PERCENT = 5.0
-TAKE_PROFIT_PERCENT = 10.0
-MAX_HOLD_HOURS = 48
+# ═══════════════════════════════════════════════════════════════════════════
+# SCAN SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
 
+SCAN_INTERVAL         = 900     # 15 წუთი
+ASSET_DELAY           = 1.5     # წამი assets შორის
+NOTIFICATION_COOLDOWN = 1800    # 30 წუთი cooldown per symbol
+MAX_HOLD_HOURS        = 240     # 10 დღე default max hold
+
+# ═══════════════════════════════════════════════════════════════════════════
 # AI SETTINGS
-AI_ENTRY_THRESHOLD = 45
-AI_MIN_CONFIDENCE = 45
-AI_CAUTION_THRESHOLD = 55
-AI_HIGH_RISK_THRESHOLD = 75
-AI_CONFIDENCE_HIGH = 80
-AI_CONFIDENCE_LOW = 40
+# ═══════════════════════════════════════════════════════════════════════════
 
-# FILES
-SUBSCRIPTIONS_FILE = "subscriptions.json"
+AI_MODEL                  = "claude-sonnet-4-20250514"   # Sonnet — fast + cheap
+AI_MAX_TOKENS             = 1200
+AI_ENTRY_THRESHOLD        = 50    # min score AI-სთვის გასაგზავნად
+AI_MIN_CONFIDENCE         = 50
+AI_CAUTION_THRESHOLD      = 60
+AI_HIGH_RISK_THRESHOLD    = 75
+AI_CONFIDENCE_HIGH        = 80
+AI_CONFIDENCE_LOW         = 45
+MIN_CONFIDENCE_FOR_AI     = 58   # strategy confidence >= ამ score-ამდე AI-ს ვიძახებთ
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIGNAL QUALITY GATES
+# ═══════════════════════════════════════════════════════════════════════════
+
+MAX_SIGNALS_PER_DAY           = 5    # სულ დღეში
+MAX_SIGNALS_PER_TIER_DAY = {
+    "BLUE_CHIP":   2,
+    "HIGH_GROWTH": 2,
+    "MEME":        1,
+    "NARRATIVE":   1,
+    "EMERGING":    1,
+}
+
+MIN_RR_RATIO                  = 1.5  # minimum Risk:Reward
+REQUIRE_VOLUME_CONFIRMATION   = True
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TIER-BASED RISK PARAMETERS
+# ═══════════════════════════════════════════════════════════════════════════
+
+TIER_RISK = {
+    "BLUE_CHIP": {
+        "stop_loss_pct":  5.0,
+        "take_profit_pct": 10.0,
+        "min_confidence": 60,
+        "min_rr":         1.5,
+        "max_hold_hours": 504,   # 21 day
+        "atr_stop_mult":  1.5,
+        "atr_target_mult": 2.5,
+    },
+    "HIGH_GROWTH": {
+        "stop_loss_pct":  6.0,
+        "take_profit_pct": 14.0,
+        "min_confidence": 58,
+        "min_rr":         1.8,
+        "max_hold_hours": 240,
+        "atr_stop_mult":  1.8,
+        "atr_target_mult": 3.0,
+    },
+    "MEME": {
+        "stop_loss_pct":  7.0,
+        "take_profit_pct": 20.0,
+        "min_confidence": 62,
+        "min_rr":         2.5,
+        "max_hold_hours": 72,
+        "atr_stop_mult":  2.0,
+        "atr_target_mult": 4.0,
+    },
+    "NARRATIVE": {
+        "stop_loss_pct":  6.5,
+        "take_profit_pct": 16.0,
+        "min_confidence": 60,
+        "min_rr":         2.0,
+        "max_hold_hours": 168,
+        "atr_stop_mult":  1.8,
+        "atr_target_mult": 3.2,
+    },
+    "EMERGING": {
+        "stop_loss_pct":  8.0,
+        "take_profit_pct": 20.0,
+        "min_confidence": 63,
+        "min_rr":         2.2,
+        "max_hold_hours": 120,
+        "atr_stop_mult":  2.2,
+        "atr_target_mult": 4.0,
+    },
+}
+
+# Default fallback
+DEFAULT_STOP_LOSS_PCT    = 5.0
+DEFAULT_TAKE_PROFIT_PCT  = 10.0
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STRATEGY COOLDOWNS (საათებში)
+# ═══════════════════════════════════════════════════════════════════════════
+
+STRATEGY_COOLDOWNS = {
+    "long_term":     48,
+    "swing":         96,
+    "scalping":       6,
+    "opportunistic": 72,
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TECHNICAL INDICATOR SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+
+RSI_PERIOD      = 14
+RSI_OVERBOUGHT  = 70
+RSI_OVERSOLD    = 30
+EMA_SHORT       = 50
+EMA_LONG        = 200
+BB_PERIOD       = 20
+BB_STD          = 2.0
+MACD_FAST       = 12
+MACD_SLOW       = 26
+MACD_SIGNAL_P   = 9
+ATR_PERIOD      = 14
+VOLUME_MA       = 20
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FILES & PATHS
+# ═══════════════════════════════════════════════════════════════════════════
+
+SUBSCRIPTIONS_FILE    = "subscriptions.json"
 PAYMENT_REQUESTS_FILE = "payment_requests.json"
-KNOWLEDGE_BASE_FILE = "trading_knowledge.json"
-CACHE_FILE = "market_cache.json"
-PDF_FOLDER = "My-AI-Agent_needs"
+ACTIVE_POSITIONS_FILE = "active_positions.json"
+KNOWLEDGE_BASE_FILE   = "trading_knowledge.json"
+ANALYTICS_DB          = "trading_analytics.db"
+SIGNAL_HISTORY_DB     = "signal_history.db"
+LOG_FILE              = "tradeally.log"
+LOG_MAX_BYTES         = 10 * 1024 * 1024
+LOG_BACKUP_COUNT      = 5
 
-# MESSAGES
+# ═══════════════════════════════════════════════════════════════════════════
+# TELEGRAM MESSAGE TEMPLATES
+# ═══════════════════════════════════════════════════════════════════════════
+
 WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
-🚀 AI Crypto Trading Bot
-📊 {crypto_count} კრიპტო | 🧠 AI Risk
-💰 150₾/თვე
-/subscribe - გამოწერა"""
 
-PAYMENT_INSTRUCTIONS = """💳 გადახდა
-GE70BG0000000538913702
-150₾ → ქვითარი აქ"""
+🤖 Trade Ally — AI Crypto Trading Bot
 
-BUY_SIGNAL_TEMPLATE = """🟢 იყიდე: {asset} [{tier}]
-💵 ${price:.4f}
-📊 RSI: {rsi:.1f}
-🧠 {ai_score}/100
-🔌 {data_source}
+📊 57 კრიპტო | 24/7 მონიტორინგი
+🧠 AI Risk Evaluator (Claude Sonnet)
+🎯 4 სტრატეგია | Real-time Exit Signals
 
-{reasons}
+💰 Subscription: 150₾ / თვე
 
-🎯 რისკ-მენეჯმენტი:
-🔴 Stop: -{sl_percent}%
-🟢 Target: +{tp_percent}%"""
+/subscribe — გამოწერა
+/guide — სახელმძღვანელო
+/tiers — კატეგორიები"""
 
-SELL_SIGNAL_TEMPLATE = """{emoji} გაყიდე: {asset}
-📊 ${entry_price:.4f} → ${exit_price:.4f}
-💰 {profit:+.2f}%
-⏱️ {hours:.1f}სთ
-{reason}"""
+PAYMENT_INSTRUCTIONS = """💳 გადახდის ინსტრუქცია
 
-GUIDE_FOOTER = "\n━━━━━━━━━━\n📖 /guide"
+თანხა: 150₾ / თვე
 
-TIER_DESCRIPTIONS = """📊 კატეგორიები:
-🔵 Blue Chips: BTC, ETH, SOL
-🟢 High Growth: NEAR, ARB, SUI
-🟡 Meme: DOGE, PEPE, WIF
-🟣 Narrative: RNDR, FET, GALA
-🔴 Emerging: SEI, TIA, TON"""
+გადახდის გზები:
+━━━━━━━━━━━━━━━━━━
+🏦 TBC Bank
+IBAN: GE70BG0000000538913702
+დანიშნულება: შენი Telegram ID
 
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+📱 UNISTREAM
+ნომერი: +995 XXX XX XX XX
+შენობა: შენი Telegram ID
+
+💎 USDT (TRC20)
+მისამართი: [WALLET_ADDRESS]
+
+━━━━━━━━━━━━━━━━━━
+გადახდის შემდეგ:
+1. ქვითრის ფოტო — გამოაგზავნე ბოტზე
+2. Admin: 1-6 საათი
+3. Premium — 30 დღე"""
+
+TIER_DESCRIPTIONS = """📊 Asset კატეგორიები
+
+🔵 BLUE CHIP (Tier 1)
+BTC, ETH, BNB, SOL, XRP...
+→ დაბალი რისკი | -5% stop | +10% target
+
+🟢 HIGH GROWTH (Tier 2)
+NEAR, ARB, SUI, INJ, APT...
+→ საშუალო რისკი | -6% stop | +14% target
+
+🟡 MEME (Tier 3)
+DOGE, PEPE, WIF, BONK...
+→ მაღალი რისკი | -7% stop | +20% target
+
+🟣 NARRATIVE (Tier 4)
+RNDR, FET, TAO, ONDO...
+→ საშუალო-მაღალი | -6.5% stop | +16% target
+
+🔴 EMERGING (Tier 5)
+SEI, TIA, TON, ZK...
+→ ყველაზე მაღალი | -8% stop | +20% target"""
+
+GUIDE_FOOTER = "\n\n⚠️ DYOR — არ არის ფინანსური რჩევა\n💡 Always use Stop-Loss!"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════
+
+def get_tier(symbol: str) -> str:
+    if symbol in TIER_1_BLUE_CHIPS:   return "BLUE_CHIP"
+    if symbol in TIER_2_HIGH_GROWTH:  return "HIGH_GROWTH"
+    if symbol in TIER_3_MEME_COINS:   return "MEME"
+    if symbol in TIER_4_NARRATIVE:    return "NARRATIVE"
+    if symbol in TIER_5_EMERGING:     return "EMERGING"
+    return "BLUE_CHIP"
+
+
+def get_tier_risk(tier: str) -> dict:
+    return TIER_RISK.get(tier, TIER_RISK["HIGH_GROWTH"])
+
+
+def validate_config() -> bool:
+    issues = []
+    if not TELEGRAM_TOKEN:
+        issues.append("TELEGRAM_TOKEN not set")
+    if not ANTHROPIC_API_KEY:
+        issues.append("ANTHROPIC_API_KEY not set")
+    if ADMIN_ID == 0:
+        issues.append("ADMIN_ID not set")
+
+    if issues:
+        for issue in issues:
+            logger.error(f"❌ Config: {issue}")
+        return False
+
+    logger.info("✅ Config validated OK")
+    return True

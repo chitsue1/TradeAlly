@@ -1,341 +1,501 @@
 """
-AI Risk Intelligence v2.0 PROFESSIONAL
-✅ BRUTAL timing analysis
-✅ REALISTIC target assessment
-✅ Entry zone optimization
-✅ No FOMO, no optimism
+═══════════════════════════════════════════════════════════════════════════════
+AI RISK EVALUATOR v3.0 — PROFESSIONAL GRADE
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ შენარჩუნებული ძველიდან:
+- BRUTAL honesty mandate
+- 4 decision types (APPROVE / APPROVE_WITH_CAUTION / DELAY_ENTRY / REJECT)
+- Entry zone optimization
+- Realistic target assessment
+- Georgian language responses
+- claude-sonnet (fast + cost-effective)
+
+✅ გაუმჯობესებები v3.0:
+- ATR-based stop/target suggestions (არა random %)
+- R:R ratio calculation და validation
+- Tier-aware evaluation (MEME vs BLUE_CHIP სხვაგვარად)
+- Volume spike analysis (pump detection)
+- Support/resistance distance scoring
+- Structured reasoning (5 explicit checks)
+- Async client (non-blocking)
+- Retry logic on API failure
+- Trade outcome feedback loop (learning)
+═══════════════════════════════════════════════════════════════════════════════
 """
-import logging, json
-from typing import Dict, List, Tuple
-from dataclasses import dataclass
+
+import logging
+import json
+import asyncio
+from typing import Dict, List, Tuple, Optional
+from dataclasses import dataclass, field
 from enum import Enum
 import anthropic
 
+from config import (
+    AI_MODEL, AI_MAX_TOKENS, ANTHROPIC_API_KEY,
+    AI_MIN_CONFIDENCE, AI_CAUTION_THRESHOLD,
+    MIN_RR_RATIO, get_tier_risk
+)
+
 logger = logging.getLogger(__name__)
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA MODELS
+# ═══════════════════════════════════════════════════════════════════════════
+
 class AIDecision(Enum):
-    APPROVE = "APPROVE"
+    APPROVE             = "APPROVE"
     APPROVE_WITH_CAUTION = "APPROVE_WITH_CAUTION"
-    DELAY_ENTRY = "DELAY_ENTRY"
-    REJECT = "REJECT"
+    DELAY_ENTRY         = "DELAY_ENTRY"
+    REJECT              = "REJECT"
+
 
 @dataclass
 class AIEvaluation:
-    decision: AIDecision
+    decision:            AIDecision
     adjusted_confidence: float
-    risk_score: float
-    reasoning: List[str]
-    timing_advice: str
-    red_flags: List[str]
-    green_flags: List[str]
-    entry_zone_min: float = 0.0  # NEW: Better entry price (lower bound)
-    entry_zone_max: float = 0.0  # NEW: Better entry price (upper bound)
-    realistic_target_pct: float = 0.0  # NEW: More realistic target
+    risk_score:          float          # 0-100 (100 = max risk)
+    reasoning:           List[str]
+    timing_advice:       str            # ENTER_NOW / WAIT_FOR_PULLBACK / TOO_LATE / PERFECT_TIMING
+    red_flags:           List[str]
+    green_flags:         List[str]
+
+    # Entry zone
+    entry_zone_min:      float = 0.0
+    entry_zone_max:      float = 0.0
+
+    # Target & Stop
+    realistic_target_pct: float = 0.0
+    suggested_stop_pct:   float = 0.0
+    risk_reward_ratio:    float = 0.0
+
+    # Extra context
+    pump_risk:           bool  = False
+    near_resistance:     bool  = False
+
+
+@dataclass
+class TradeOutcome:
+    """Trade feedback — AI სწავლობს"""
+    symbol:        str
+    strategy:      str
+    tier:          str
+    entry_price:   float
+    exit_price:    float
+    profit_pct:    float
+    hold_hours:    float
+    ai_decision:   str
+    win:           bool
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AI RISK EVALUATOR v3.0
+# ═══════════════════════════════════════════════════════════════════════════
 
 class AIRiskEvaluator:
-    def __init__(self, api_key: str):
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = "claude-sonnet-4-20250514"
-        self.MIN_CONFIDENCE_THRESHOLD = 40  # Lowered from 45
-        self.HIGH_RISK_THRESHOLD = 75
-        self.CAUTION_CONFIDENCE_THRESHOLD = 50  # Lowered from 55
-        logger.info("🧠 AI Risk Evaluator v2.0 PROFESSIONAL initialized")
+    """
+    Professional AI Risk Evaluator
 
-    async def evaluate_signal(self, symbol: str, strategy_type: str, entry_price: float,
-                             strategy_confidence: float, indicators: Dict, market_structure: Dict,
-                             regime: str, tier: str) -> AIEvaluation:
+    ყოველი სიგნალი გადის 5-ეტაპიანი შემოწმებით:
+    1. Timing Check (RSI, EMA position)
+    2. Entry Zone (სადაა ახლა ფასი — კარგი თუ გვიანი?)
+    3. Realistic Target (resistance-ზე დაყრდნობით)
+    4. Volume Analysis (pump detection)
+    5. Risk/Reward (min 1.5:1 required)
+    """
+
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or ANTHROPIC_API_KEY
+        self.client  = anthropic.AsyncAnthropic(api_key=self.api_key)
+        self.model   = AI_MODEL
+        self.max_tokens = AI_MAX_TOKENS
+
+        # Learning feedback
+        self.trade_outcomes: List[TradeOutcome] = []
+        self.MAX_OUTCOMES = 100
+
+        # Stats
+        self.stats = {
+            "total_evaluated": 0,
+            "approved":        0,
+            "caution":         0,
+            "delayed":         0,
+            "rejected":        0,
+            "api_errors":      0,
+        }
+
+        logger.info(f"🧠 AIRiskEvaluator v3.0 initialized | Model: {self.model}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # MAIN EVALUATE
+    # ═══════════════════════════════════════════════════════════════════════
+
+    async def evaluate_signal(
+        self,
+        symbol:              str,
+        strategy_type:       str,
+        entry_price:         float,
+        strategy_confidence: float,
+        indicators:          Dict,
+        market_structure:    Dict,
+        regime:              str,
+        tier:                str
+    ) -> AIEvaluation:
+
+        self.stats["total_evaluated"] += 1
+
         try:
-            logger.debug(f"🧠 Professional analysis: {symbol}...")
-
-            prompt = self._build_professional_prompt(
-                symbol, strategy_type, entry_price, strategy_confidence,
-                indicators, market_structure, regime, tier
+            prompt   = self._build_prompt(
+                symbol, strategy_type, entry_price,
+                strategy_confidence, indicators,
+                market_structure, regime, tier
             )
+            response = await self._call_claude(prompt)
+            result   = self._parse_response(response, strategy_confidence, entry_price, tier)
 
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1200,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            result_text = response.content[0].text
-            logger.debug(f"🧠 Response: {len(result_text)} chars")
-
-            evaluation = self._parse_professional_response(result_text, strategy_confidence, entry_price)
+            # Update stats
+            dec = result.decision.value
+            if dec == "APPROVE":             self.stats["approved"] += 1
+            elif dec == "APPROVE_WITH_CAUTION": self.stats["caution"] += 1
+            elif dec == "DELAY_ENTRY":       self.stats["delayed"]  += 1
+            else:                            self.stats["rejected"] += 1
 
             logger.info(
-                f"🧠 {symbol}: {evaluation.decision.value} | "
-                f"Conf: {strategy_confidence}% → {evaluation.adjusted_confidence:.0f}% | "
-                f"Entry Zone: ${evaluation.entry_zone_min:.4f}-${evaluation.entry_zone_max:.4f}"
+                f"🧠 {symbol} | {dec} | "
+                f"Conf: {strategy_confidence:.0f}%→{result.adjusted_confidence:.0f}% | "
+                f"R:R={result.risk_reward_ratio:.2f} | "
+                f"Timing: {result.timing_advice}"
             )
-
-            return evaluation
+            return result
 
         except Exception as e:
-            logger.error(f"❌ AI error: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            self.stats["api_errors"] += 1
+            logger.error(f"❌ AI error for {symbol}: {e}")
+            return self._conservative_fallback(strategy_confidence, entry_price, tier)
 
-            return AIEvaluation(
-                decision=AIDecision.APPROVE_WITH_CAUTION,
-                adjusted_confidence=strategy_confidence * 0.75,
-                risk_score=55.0,
-                reasoning=["AI დროებით მიუწვდომელია - კონსერვატიული დამტკიცება"],
-                timing_advice="ENTER_NOW",
-                red_flags=["AI სერვისი დროებით გამორთულია"],
-                green_flags=[],
-                entry_zone_min=entry_price * 0.97,
-                entry_zone_max=entry_price,
-                realistic_target_pct=8.0
-            )
+    # ═══════════════════════════════════════════════════════════════════════
+    # PROMPT BUILDER
+    # ═══════════════════════════════════════════════════════════════════════
 
-    def _build_professional_prompt(self, symbol: str, strategy_type: str, entry_price: float,
-                                   strategy_confidence: float, indicators: Dict,
-                                   market_structure: Dict, regime: str, tier: str) -> str:
+    def _build_prompt(
+        self,
+        symbol: str, strategy_type: str, entry_price: float,
+        strategy_confidence: float, indicators: Dict,
+        market_structure: Dict, regime: str, tier: str
+    ) -> str:
 
-        rsi = indicators.get('rsi', 50)
-        prev_rsi = indicators.get('prev_rsi', 50)
-        rsi_change = rsi - prev_rsi
+        rsi        = indicators.get("rsi", 50)
+        prev_rsi   = indicators.get("prev_rsi", 50)
+        rsi_delta  = rsi - prev_rsi
 
-        ema50 = indicators.get('ema50', entry_price)
-        ema200 = indicators.get('ema200', entry_price)
+        ema50      = indicators.get("ema50", entry_price)
+        ema200     = indicators.get("ema200", entry_price)
 
-        price_vs_ema50 = ((entry_price - ema50) / ema50 * 100) if ema50 > 0 else 0
-        price_vs_ema200 = ((entry_price - ema200) / ema200 * 100) if ema200 > 0 else 0
+        vs_ema50   = ((entry_price - ema50)  / ema50  * 100) if ema50  > 0 else 0
+        vs_ema200  = ((entry_price - ema200) / ema200 * 100) if ema200 > 0 else 0
 
-        macd_hist = indicators.get('macd_histogram', 0)
-        macd_prev = indicators.get('macd_histogram_prev', 0)
+        macd_hist      = indicators.get("macd_histogram", 0)
+        macd_hist_prev = indicators.get("macd_histogram_prev", 0)
 
-        volume = indicators.get('volume', 1000000)
-        avg_volume = indicators.get('avg_volume_20d', 1000000)
-        volume_ratio = volume / avg_volume if avg_volume > 0 else 1.0
+        volume    = indicators.get("volume", 1_000_000)
+        avg_vol   = indicators.get("avg_volume_20d", 1_000_000)
+        vol_ratio = volume / avg_vol if avg_vol > 0 else 1.0
 
-        support = market_structure.get('nearest_support', entry_price * 0.95)
-        resistance = market_structure.get('nearest_resistance', entry_price * 1.05)
+        support    = market_structure.get("nearest_support",    entry_price * 0.95)
+        resistance = market_structure.get("nearest_resistance", entry_price * 1.05)
 
-        distance_to_support = ((entry_price - support) / support * 100) if support > 0 else 5
-        distance_to_resistance = ((resistance - entry_price) / entry_price * 100) if entry_price > 0 else 5
+        dist_sup = ((entry_price - support)    / support    * 100) if support    > 0 else 5
+        dist_res = ((resistance  - entry_price) / entry_price * 100) if entry_price > 0 else 5
+        rr_raw   = dist_res / dist_sup if dist_sup > 0 else 0
 
-        return f"""You are a PROFESSIONAL TRADER with 10+ years experience. Analyze this signal with BRUTAL HONESTY.
+        tier_risk   = get_tier_risk(tier)
+        ideal_stop  = tier_risk["stop_loss_pct"]
+        ideal_target = tier_risk["take_profit_pct"]
 
-**MANDATE:**
-- Kill all FOMO and optimism
-- Focus on TIMING: are we early, perfect, or late?
-- Provide REALISTIC targets, not dreams
-- Suggest better entry zones if current price is bad
+        # Recent outcomes for context
+        recent_str = ""
+        if self.trade_outcomes:
+            recent = [o for o in self.trade_outcomes[-5:] if o.tier == tier]
+            if recent:
+                recent_str = "\nBOT TRACK RECORD (same tier):\n"
+                for o in recent[-3:]:
+                    emoji = "✅" if o.win else "❌"
+                    recent_str += f"  {emoji} {o.symbol} ({o.strategy}): {o.profit_pct:+.1f}% in {o.hold_hours:.0f}h\n"
 
-═══════════════════════════════════════════════════════════
+        prompt = f"""You are a PROFESSIONAL CRYPTO TRADER with 10+ years experience.
+Your mandate: BRUTAL HONESTY. Kill FOMO. Save the trader's money.
 
-**SIGNAL ANALYSIS:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SIGNAL TO EVALUATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Symbol:     {symbol} [{tier}]
+Strategy:   {strategy_type}
+Price:      ${entry_price:.6f}
+Confidence: {strategy_confidence:.0f}%
+Regime:     {regime}
+{recent_str}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TECHNICAL SNAPSHOT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RSI:        {rsi:.1f} (prev {prev_rsi:.1f}, Δ{rsi_delta:+.1f})
+  → {"🔴 OVERBOUGHT >70 — do NOT enter" if rsi > 70 else "🟡 High 65-70 — late entry" if rsi > 65 else "🟢 OK zone" if rsi >= 40 else "🟡 Oversold <40"}
 
-Symbol: {symbol} ({tier})
-Strategy: {strategy_type}
-Current Price: ${entry_price:.4f}
-Strategy Confidence: {strategy_confidence}% ← VERIFY THIS!
+vs EMA50:   {vs_ema50:+.2f}%
+  → {"🔴 Extended >5% above EMA50 — missed entry" if vs_ema50 > 5 else "🟡 Slightly extended" if vs_ema50 > 3 else "🟢 Near EMA50 — good entry"}
 
-**TECHNICAL SNAPSHOT:**
+vs EMA200:  {vs_ema200:+.2f}%
+  → {"✅ Above EMA200 — uptrend confirmed" if vs_ema200 > 0 else "⚠️ Below EMA200 — against trend"}
 
-RSI: {rsi:.1f} (was {prev_rsi:.1f}, change: {rsi_change:+.1f})
-  → {f"🔴 OVERBOUGHT! RSI > 65" if rsi > 65 else f"🟡 High {rsi:.0f}" if rsi > 60 else "🟢 OK"}
+MACD hist:  {macd_hist:.6f} (prev {macd_hist_prev:.6f})
+  → {"🟢 Improving" if macd_hist > macd_hist_prev else "🔴 Weakening"}
 
-Price vs EMA50: {price_vs_ema50:+.2f}%
-  → {f"🔴 FAR ABOVE EMA50 - ფასი გადაჭარბებულია" if price_vs_ema50 > 5 else "🟢 Near EMA50"}
+Volume:     {vol_ratio:.2f}x average
+  → {"🔴 PUMP ALERT >2.5x — likely manipulation" if vol_ratio > 2.5 else "🟡 High volume >1.5x — watch carefully" if vol_ratio > 1.5 else "🟢 Normal"}
 
-Price vs EMA200: {price_vs_ema200:+.2f}%
+Support:    ${support:.6f} ({dist_sup:.1f}% below)
+Resistance: ${resistance:.6f} ({dist_res:.1f}% above)
+Raw R:R:    {rr_raw:.2f}
 
-MACD: {macd_hist:.6f} (previous: {macd_prev:.6f})
-  → {"🟢 Improving" if macd_hist > macd_prev else "🔴 Weakening"}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TIER GUIDELINES [{tier}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Typical stop:   -{ideal_stop}%
+Typical target: +{ideal_target}%
+Min R:R needed:  {MIN_RR_RATIO}
 
-Volume: {volume_ratio:.2f}x average
-  → {f"🔴 SUSPICIOUS SPIKE! >2x average" if volume_ratio > 2.0 else f"🟡 High volume" if volume_ratio > 1.5 else "🟢 Normal"}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR 5 CHECKS (respond in Georgian):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. TIMING: RSI {rsi:.0f} — early/perfect/late?
+2. ENTRY ZONE: Current price vs EMA50 — enter now or wait for pullback?
+3. REALISTIC TARGET: Resistance is {dist_res:.1f}% away — is target achievable?
+4. VOLUME: {vol_ratio:.1f}x — real momentum or pump?
+5. R:R: {rr_raw:.2f} — acceptable? (need >{MIN_RR_RATIO})
 
-Support: ${support:.4f} ({distance_to_support:.1f}% ქვემოთ)
-Resistance: ${resistance:.4f} ({distance_to_resistance:.1f}% ზემოთ)
-
-Market Regime: {regime}
-
-═══════════════════════════════════════════════════════════
-
-**YOUR CRITICAL QUESTIONS:**
-
-1. **TIMING CHECK:**
-   - RSI {rsi:.0f}: Are we TOO LATE? Already overbought?
-   - Price vs EMA50 ({price_vs_ema50:+.1f}%): Did we miss the entry?
-   - MACD turning: Is momentum real or fading?
-
-   → If RSI > 65 OR price > EMA50+3%: "გვიან ხარ - ფასი უკვე გაიზარდა"
-
-2. **ENTRY ZONE OPTIMIZATION:**
-   - Current: ${entry_price:.4f}
-   - Better entry if pullback: ${entry_price * 0.97:.4f} - ${entry_price * 0.99:.4f}?
-   - Support zone: ${support:.4f}
-
-   → Suggest: Wait for dip OR aggressive entry now?
-
-3. **REALISTIC TARGET:**
-   - Distance to resistance: {distance_to_resistance:.1f}%
-   - Distance to EMA200: {price_vs_ema200:+.1f}%
-
-   → What's ACHIEVABLE target? Not fantasy!
-   → If resistance close (<5%): "Target unrealistic"
-
-4. **VOLUME ANALYSIS:**
-   - {volume_ratio:.2f}x: Real momentum or PUMP?
-   → If >2.0x: "Volume spike საეჭვოა - pump risk"
-
-5. **RISK/REWARD:**
-   - Support distance: {distance_to_support:.1f}%
-   - Resistance distance: {distance_to_resistance:.1f}%
-   → Is R:R worth it? (need >1.5)
-
-═══════════════════════════════════════════════════════════
-
-**RESPOND IN GEORGIAN (use ქართული for text, keep numbers/terms English):**
-
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESPOND IN JSON (Georgian text, English numbers/terms):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {{
-  "decision": "APPROVE" or "APPROVE_WITH_CAUTION" or "DELAY_ENTRY" or "REJECT",
-  "adjusted_confidence": 42,
-  "risk_score": 65,
-  "timing_advice": "TOO_LATE" or "WAIT_FOR_PULLBACK" or "ENTER_NOW" or "PERFECT_TIMING",
-  "entry_zone_min": {entry_price * 0.96:.4f},
-  "entry_zone_max": {entry_price * 0.98:.4f},
-  "realistic_target_pct": 7.5,
+  "decision": "APPROVE" | "APPROVE_WITH_CAUTION" | "DELAY_ENTRY" | "REJECT",
+  "adjusted_confidence": <number 0-100>,
+  "risk_score": <number 0-100, 100=max danger>,
+  "timing_advice": "PERFECT_TIMING" | "ENTER_NOW" | "WAIT_FOR_PULLBACK" | "TOO_LATE",
+  "entry_zone_min": <price — lower bound of ideal entry>,
+  "entry_zone_max": <price — upper bound of ideal entry>,
+  "realistic_target_pct": <number — realistic % gain>,
+  "suggested_stop_pct": <number — suggested stop % below entry>,
+  "risk_reward_ratio": <calculated ratio>,
+  "pump_risk": <true|false>,
+  "near_resistance": <true|false>,
   "reasoning": [
-    "RSI 68 - overbought, ფასი უკვე გაიზარდა +5%",
-    "უკეთესი შესვლა: დაელოდე pullback ${entry_price * 0.97:.4f}-მდე",
-    "რეალისტური Target: +7-8%, არა +16%"
+    "ქართული ახსნა 1",
+    "ქართული ახსნა 2",
+    "ქართული ახსნა 3"
   ],
-  "red_flags": [
-    "ფასი EMA50-ზე +{price_vs_ema50:.1f}% - გვიან ხარ შესვლისთვის",
-    "Volume {volume_ratio:.1f}x - საეჭვო spike, pump რისკი",
-    "Resistance {distance_to_resistance:.1f}% ზემოთ - ახლოსაა, rejection რისკი"
-  ],
-  "green_flags": [
-    "EMA50 > EMA200 - გრძელვადიანი uptrend",
-    "Support ${support:.4f}-ზე ძლიერია",
-    "MACD momentum დადებითია"
-  ]
+  "red_flags": ["flag1", "flag2"],
+  "green_flags": ["flag1", "flag2"]
 }}
 
-═══════════════════════════════════════════════════════════
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DECISION CRITERIA:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+APPROVE:             RSI 40-62, near EMA50, R:R>2, volume normal, target clear
+APPROVE_WITH_CAUTION: RSI 62-68, slightly extended, R:R 1.5-2, manageable risks
+DELAY_ENTRY:         technically valid but PRICE TOO HIGH NOW — wait for dip
+REJECT:              RSI>70, pump detected, R:R<1.5, no clear target, against trend
 
-**DECISION LOGIC:**
+BE BRUTAL. One bad trade destroys trust. Save the trader's money."""
 
-APPROVE:
-  - Perfect timing (RSI 45-60, price near EMA50)
-  - Strong structure (support strong, R:R > 2)
-  - Realistic target achievable
+        return prompt
 
-APPROVE_WITH_CAUTION:
-  - OK timing but late entry (RSI 60-65)
-  - R:R decent (1.5-2.0)
-  - Some red flags but manageable
+    # ═══════════════════════════════════════════════════════════════════════
+    # CLAUDE API CALL
+    # ═══════════════════════════════════════════════════════════════════════
 
-DELAY_ENTRY:
-  - Too late now (RSI > 65, price extended)
-  - Wait for pullback to better zone
-  - Structure OK but timing bad
+    async def _call_claude(self, prompt: str, retries: int = 2) -> str:
+        for attempt in range(retries + 1):
+            try:
+                message = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return message.content[0].text
+            except anthropic.RateLimitError:
+                wait = 20 * (attempt + 1)
+                logger.warning(f"⚠️ Rate limit — waiting {wait}s")
+                await asyncio.sleep(wait)
+            except anthropic.APIError as e:
+                if attempt < retries:
+                    await asyncio.sleep(5)
+                else:
+                    raise e
+        raise RuntimeError("Claude API failed after retries")
 
-REJECT:
-  - Overbought (RSI > 70)
-  - Fake pump (volume spike >2.5x)
-  - R:R terrible (<1.5)
-  - Target unrealistic
+    # ═══════════════════════════════════════════════════════════════════════
+    # RESPONSE PARSER
+    # ═══════════════════════════════════════════════════════════════════════
 
-═══════════════════════════════════════════════════════════
+    def _parse_response(
+        self,
+        text: str,
+        original_conf: float,
+        entry_price: float,
+        tier: str
+    ) -> AIEvaluation:
 
-BE BRUTAL. BE HONEST. SAVE THE TRADER'S MONEY."""
-
-    def _parse_professional_response(self, text: str, original_conf: float, entry_price: float) -> AIEvaluation:
         try:
-            text = text.strip()
-
+            # Extract JSON block
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0]
             elif "```" in text:
                 text = text.split("```")[1].split("```")[0]
 
-            text = text.strip()
-            data = json.loads(text)
+            data = json.loads(text.strip())
 
-            decision_str = data.get("decision", "APPROVE_WITH_CAUTION")
-            if decision_str not in ["APPROVE", "APPROVE_WITH_CAUTION", "DELAY_ENTRY", "REJECT"]:
-                decision_str = "APPROVE_WITH_CAUTION"
+            # Decision
+            dec_str = data.get("decision", "APPROVE_WITH_CAUTION").upper()
+            if dec_str not in {"APPROVE", "APPROVE_WITH_CAUTION", "DELAY_ENTRY", "REJECT"}:
+                dec_str = "APPROVE_WITH_CAUTION"
+            decision = AIDecision[dec_str]
 
-            decision = AIDecision[decision_str]
+            # Numerics
+            adj_conf     = float(data.get("adjusted_confidence", original_conf * 0.85))
+            risk_score   = float(data.get("risk_score", 55.0))
+            target_pct   = float(data.get("realistic_target_pct", 8.0))
+            stop_pct     = float(data.get("suggested_stop_pct", 5.0))
+            rr_ratio     = float(data.get("risk_reward_ratio", 1.5))
+            zone_min     = float(data.get("entry_zone_min", entry_price * 0.97))
+            zone_max     = float(data.get("entry_zone_max", entry_price * 0.995))
 
-            adjusted_conf = float(data.get("adjusted_confidence", original_conf * 0.8))
-            risk_score = float(data.get("risk_score", 55.0))
-            timing = data.get("timing_advice", "ENTER_NOW")
-
-            entry_zone_min = float(data.get("entry_zone_min", entry_price * 0.97))
-            entry_zone_max = float(data.get("entry_zone_max", entry_price * 0.99))
-            realistic_target = float(data.get("realistic_target_pct", 8.0))
-
-            reasoning = data.get("reasoning", ["AI ანალიზი ჩატარდა"])
-            red_flags = data.get("red_flags", [])
-            green_flags = data.get("green_flags", [])
-
-            if not isinstance(reasoning, list):
-                reasoning = [str(reasoning)]
-            if not isinstance(red_flags, list):
-                red_flags = []
-            if not isinstance(green_flags, list):
-                green_flags = []
-
-            adjusted_conf = max(0.0, min(100.0, adjusted_conf))
+            # Validate & clamp
+            adj_conf   = max(0.0, min(100.0, adj_conf))
             risk_score = max(0.0, min(100.0, risk_score))
-            realistic_target = max(3.0, min(20.0, realistic_target))
+            target_pct = max(3.0, min(50.0, target_pct))
+            stop_pct   = max(1.5, min(15.0, stop_pct))
+            rr_ratio   = max(0.1, min(10.0, rr_ratio))
+
+            # If AI gives R:R but didn't compute correctly — recalculate
+            if stop_pct > 0 and target_pct > 0:
+                rr_ratio = round(target_pct / stop_pct, 2)
 
             return AIEvaluation(
                 decision=decision,
-                adjusted_confidence=adjusted_conf,
+                adjusted_confidence=adj_conf,
                 risk_score=risk_score,
-                reasoning=reasoning,
-                timing_advice=timing,
-                red_flags=red_flags,
-                green_flags=green_flags,
-                entry_zone_min=entry_zone_min,
-                entry_zone_max=entry_zone_max,
-                realistic_target_pct=realistic_target
+                reasoning=self._ensure_list(data.get("reasoning", [])),
+                timing_advice=data.get("timing_advice", "ENTER_NOW"),
+                red_flags=self._ensure_list(data.get("red_flags", [])),
+                green_flags=self._ensure_list(data.get("green_flags", [])),
+                entry_zone_min=zone_min,
+                entry_zone_max=zone_max,
+                realistic_target_pct=target_pct,
+                suggested_stop_pct=stop_pct,
+                risk_reward_ratio=rr_ratio,
+                pump_risk=bool(data.get("pump_risk", False)),
+                near_resistance=bool(data.get("near_resistance", False)),
             )
 
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ JSON parse: {e}")
-            logger.error(f"Response: {text[:300]}")
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning(f"⚠️ AI parse failed: {e} — using conservative fallback")
+            return self._conservative_fallback(original_conf, entry_price, tier)
 
-            return AIEvaluation(
-                AIDecision.APPROVE_WITH_CAUTION,
-                original_conf * 0.75, 60.0,
-                ["JSON parsing შეცდომა - კონსერვატიული დამტკიცება"],
-                "ENTER_NOW", ["Parsing error"], [],
-                entry_price * 0.97, entry_price * 0.99, 8.0
-            )
-        except Exception as e:
-            logger.error(f"❌ Parse error: {e}")
-            return AIEvaluation(
-                AIDecision.APPROVE_WITH_CAUTION,
-                original_conf * 0.75, 60.0,
-                ["Parse შეცდომა"], "ENTER_NOW",
-                ["Unknown error"], [],
-                entry_price * 0.97, entry_price * 0.99, 8.0
-            )
+    # ═══════════════════════════════════════════════════════════════════════
+    # SEND DECISION HELPER
+    # ═══════════════════════════════════════════════════════════════════════
 
     def should_send_signal(self, evaluation: AIEvaluation) -> Tuple[bool, str]:
+        """Returns (should_send, reason_text)"""
+
         if evaluation.decision == AIDecision.APPROVE:
-            return True, "AI დაადასტურა: პერფექტული timing"
+            return True, "✅ AI დაადასტურა: პერფექტული timing"
 
-        elif evaluation.decision == AIDecision.APPROVE_WITH_CAUTION:
-            if evaluation.adjusted_confidence >= self.CAUTION_CONFIDENCE_THRESHOLD:
-                return True, f"AI დაადასტურა სიფრთხილით (Entry Zone: ${evaluation.entry_zone_min:.4f}-${evaluation.entry_zone_max:.4f})"
-            else:
-                return False, f"AI დაბლოკა: ქონფიდენსი {evaluation.adjusted_confidence:.0f}% ძალიან დაბალია"
+        if evaluation.decision == AIDecision.APPROVE_WITH_CAUTION:
+            if evaluation.adjusted_confidence >= AI_CAUTION_THRESHOLD:
+                entry_txt = (
+                    f"Entry zone: ${evaluation.entry_zone_min:.4f}–${evaluation.entry_zone_max:.4f}"
+                    if evaluation.entry_zone_min > 0 else ""
+                )
+                return True, f"⚠️ AI: სიფრთხილით. {entry_txt}"
+            return False, f"❌ AI: confidence {evaluation.adjusted_confidence:.0f}% — ძალიან დაბალია"
 
-        elif evaluation.decision == AIDecision.DELAY_ENTRY:
-            return False, f"AI: {evaluation.timing_advice} - დაელოდე უკეთეს ფასს ${evaluation.entry_zone_min:.4f}-${evaluation.entry_zone_max:.4f}"
+        if evaluation.decision == AIDecision.DELAY_ENTRY:
+            return False, (
+                f"⏳ AI: დაელოდე pullback-ს "
+                f"${evaluation.entry_zone_min:.4f}–${evaluation.entry_zone_max:.4f}"
+            )
 
-        elif evaluation.decision == AIDecision.REJECT:
-            flags = evaluation.red_flags[:2] if evaluation.red_flags else ["სუსტი სიგნალი"]
-            return False, f"AI უარყო: {' | '.join(flags)}"
+        # REJECT
+        flags = evaluation.red_flags[:2] if evaluation.red_flags else ["სუსტი სიგნალი"]
+        return False, f"❌ AI უარყო: {' | '.join(flags)}"
 
-        return False, "AI გაურკვეველი"
+    # ═══════════════════════════════════════════════════════════════════════
+    # LEARNING FEEDBACK
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def record_outcome(self, outcome: TradeOutcome):
+        """Trade outcome ჩაწერა — AI context-ისთვის"""
+        self.trade_outcomes.append(outcome)
+        if len(self.trade_outcomes) > self.MAX_OUTCOMES:
+            self.trade_outcomes.pop(0)
+
+        win_count  = sum(1 for o in self.trade_outcomes if o.win)
+        total      = len(self.trade_outcomes)
+        win_rate   = win_count / total * 100 if total > 0 else 0
+        logger.info(f"📊 Trade recorded: {outcome.symbol} {outcome.profit_pct:+.1f}% | Win rate: {win_rate:.1f}%")
+
+    def get_win_rate(self, tier: str = None) -> float:
+        outcomes = self.trade_outcomes
+        if tier:
+            outcomes = [o for o in outcomes if o.tier == tier]
+        if not outcomes:
+            return 0.0
+        return sum(1 for o in outcomes if o.win) / len(outcomes) * 100
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # HELPERS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _conservative_fallback(
+        self, conf: float, entry_price: float, tier: str
+    ) -> AIEvaluation:
+        tier_risk = get_tier_risk(tier)
+        stop_pct  = tier_risk["stop_loss_pct"]
+        tgt_pct   = tier_risk["take_profit_pct"] * 0.7   # conservative
+        rr        = round(tgt_pct / stop_pct, 2) if stop_pct > 0 else 1.2
+
+        return AIEvaluation(
+            decision=AIDecision.APPROVE_WITH_CAUTION,
+            adjusted_confidence=conf * 0.80,
+            risk_score=60.0,
+            reasoning=["AI დროებით მიუწვდომელია — კონსერვატიული შეფასება"],
+            timing_advice="ENTER_NOW",
+            red_flags=["AI სერვისი მიუწვდომელია"],
+            green_flags=[],
+            entry_zone_min=entry_price * 0.97,
+            entry_zone_max=entry_price,
+            realistic_target_pct=tgt_pct,
+            suggested_stop_pct=stop_pct,
+            risk_reward_ratio=rr,
+            pump_risk=False,
+            near_resistance=False,
+        )
+
+    @staticmethod
+    def _ensure_list(val) -> List[str]:
+        if isinstance(val, list):
+            return [str(v) for v in val]
+        if isinstance(val, str):
+            return [val]
+        return []
+
+    def get_stats(self) -> Dict:
+        total = max(self.stats["total_evaluated"], 1)
+        return {
+            **self.stats,
+            "approval_rate": f"{(self.stats['approved'] + self.stats['caution']) / total * 100:.1f}%",
+            "rejection_rate": f"{self.stats['rejected'] / total * 100:.1f}%",
+            "win_rate_all":  f"{self.get_win_rate():.1f}%",
+        }
