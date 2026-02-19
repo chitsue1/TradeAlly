@@ -27,7 +27,8 @@ import json
 import os
 import logging
 from datetime import datetime, timedelta, date
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
+
 
 import numpy as np
 
