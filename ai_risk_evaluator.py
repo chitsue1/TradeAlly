@@ -141,7 +141,8 @@ class AIRiskEvaluator:
         indicators:          Dict,
         market_structure:    Dict,
         regime:              str,
-        tier:                str
+        tier:                str,
+        symbol_history:      str = "",   # SignalMemory.get_summary()
     ) -> AIEvaluation:
 
         self.stats["total_evaluated"] += 1
@@ -150,7 +151,8 @@ class AIRiskEvaluator:
             prompt   = self._build_prompt(
                 symbol, strategy_type, entry_price,
                 strategy_confidence, indicators,
-                market_structure, regime, tier
+                market_structure, regime, tier,
+                symbol_history=symbol_history,
             )
             response = await self._call_claude(prompt)
             result   = self._parse_response(response, strategy_confidence, entry_price, tier)
@@ -184,6 +186,8 @@ class AIRiskEvaluator:
         symbol: str, strategy_type: str, entry_price: float,
         strategy_confidence: float, indicators: Dict,
         market_structure: Dict, regime: str, tier: str
+    ,
+        symbol_history: str = ""
     ) -> str:
 
         rsi        = indicators.get("rsi", 50)
@@ -224,11 +228,15 @@ class AIRiskEvaluator:
                     emoji = "✅" if o.win else "❌"
                     recent_str += f"  {emoji} {o.symbol} ({o.strategy}): {o.profit_pct:+.1f}% in {o.hold_hours:.0f}h\n"
 
+        history_section = ""
+        if symbol_history:
+            history_section = f"SYMBOL HISTORY (last 3 signals):\n{symbol_history}\n\n"
+
         prompt = f"""You are a PROFESSIONAL CRYPTO TRADER with 10+ years experience.
 Your mandate: BRUTAL HONESTY. Kill FOMO. Save the trader's money.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SIGNAL TO EVALUATE
+{history_section}SIGNAL TO EVALUATE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Symbol:     {symbol} [{tier}]
 Strategy:   {strategy_type}

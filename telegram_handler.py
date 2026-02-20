@@ -29,6 +29,12 @@ from position_monitor import PositionMonitor
 from sell_signal_message_generator import SellSignalMessageGenerator
 from signal_history_db import SignalHistoryDB, SentSignal, SignalResult, SignalStatus
 
+try:
+    from signal_memory import SignalMemory
+    MEMORY_AVAILABLE = True
+except Exception:
+    MEMORY_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -154,6 +160,14 @@ class TelegramHandler:
         self.position_monitor = None
         self.signal_history_db = SignalHistoryDB("signal_history.db")
 
+        # Signal Memory
+        self.signal_memory = None
+        if MEMORY_AVAILABLE:
+            try:
+                self.signal_memory = SignalMemory()
+            except Exception:
+                pass
+
         self._is_running = False
         self._start_lock = asyncio.Lock()
 
@@ -241,6 +255,7 @@ class TelegramHandler:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username or "friend"
         message = WELCOME_MSG_TEMPLATE.format(username=username)
+        message += "\n\n/results — ბოლო 20 სიგნალის შედეგები"
         await update.message.reply_text(message)
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -907,9 +922,86 @@ Analytics:
     # HANDLERS SETUP
     # ═══════════════════════════════════════════════════════════════════════
 
+    async def cmd_results(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """ბოლო 20 სიგნალის შედეგები — ყველა user-ისთვის ხელმისაწვდომი"""
+        try:
+            recent = self.signal_history_db.get_recent_signals(limit=20)
+
+            if not recent:
+                await update.message.reply_text(
+                    "📊 სიგნალების ისტორია\n\nჯერ არ არის დახურული სიგნალები.\n"
+                    "ბოტი იწყებს ჩაწერას პირველი trade-დან."
+                )
+                return
+
+            # Header
+            lines = ["📊 ბოლო 20 სიგნალი\n"]
+
+            closed = [s for s in recent if s.get("profit_pct") is not None]
+            pending = [s for s in recent if s.get("profit_pct") is None]
+
+            wins = sum(1 for s in closed if s["profit_pct"] > 0)
+            total_closed = len(closed)
+            win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
+
+            if total_closed > 0:
+                avg_profit = sum(s["profit_pct"] for s in closed) / total_closed
+                lines.append(
+                    f"✅ {wins}W / ❌ {total_closed - wins}L  |  Win rate: {win_rate:.0f}%"
+                )
+                lines.append(f"Avg: {avg_profit:+.1f}%  |  Pending: {len(pending)}\n")
+            lines.append("━━━━━━━━━━━━━━━━━━━━")
+
+            for sig in recent:
+                symbol   = sig.get("symbol", "?")
+                strategy = sig.get("strategy", "?")
+                sent_at  = sig.get("sent_time", "")
+                profit   = sig.get("profit_pct")
+                status   = sig.get("status")
+
+                # Format time
+                try:
+                    dt = datetime.fromisoformat(sent_at)
+                    time_str = dt.strftime("%d %b %H:%M")
+                except Exception:
+                    time_str = sent_at[:16] if sent_at else "?"
+
+                # 100$ simulation
+                if profit is not None:
+                    sim_val  = 100 * (1 + profit / 100)
+                    sim_diff = sim_val - 100
+                    sim_str  = f"${sim_val:.1f} ({sim_diff:+.1f}$)"
+                    result_emoji = "🟢" if profit > 0 else "🔴"
+                    profit_str = f"{profit:+.2f}%  {sim_str}"
+                else:
+                    result_emoji = "🟡"
+                    profit_str   = "HOLD..."
+
+                lines.append(
+                    f"{result_emoji} {symbol}  {time_str}\n"
+                    f"   {profit_str}"
+                )
+
+            lines.append("\n━━━━━━━━━━━━━━━━━━━━")
+            lines.append("🟢 მოგება  🔴 ზარალი  🟡 HOLD")
+            lines.append("\n⚠️ წარსული შედეგი არ გარანტიას ძლევს")
+
+            text = "\n".join(lines)
+
+            # Telegram 4096 char limit
+            if len(text) > 4000:
+                text = text[:4000] + "\n... (truncated)"
+
+            await update.message.reply_text(text)
+
+        except Exception as e:
+            logger.error(f"cmd_results error: {e}")
+            await update.message.reply_text("⚠️ ისტორია დროებით მიუწვდომელია")
+
     def _setup_handlers(self):
         # User commands
         self.application.add_handler(CommandHandler("start", self.cmd_start))
+        self.application.add_handler(CommandHandler("results", self.cmd_results))
         self.application.add_handler(CommandHandler("help", self.cmd_help))
         self.application.add_handler(CommandHandler("guide", self.cmd_guide))
         self.application.add_handler(CommandHandler("tiers", self.cmd_tiers))
