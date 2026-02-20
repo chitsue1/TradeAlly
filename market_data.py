@@ -49,6 +49,7 @@ class MarketData:
     macd: float
     macd_signal: float
     macd_histogram: float
+    macd_histogram_prev: float
 
     # Bollinger Bands
     bb_low: float
@@ -601,6 +602,7 @@ class MultiSourceDataProvider:
                         macd=indicators["macd"],
                         macd_signal=indicators["macd_signal"],
                         macd_histogram=indicators["macd_histogram"],
+                        macd_histogram_prev=indicators.get("macd_histogram_prev", indicators["macd_histogram"]),
                         bb_low=indicators["bb_low"],
                         bb_high=indicators["bb_high"],
                         bb_mid=indicators["bb_mid"],

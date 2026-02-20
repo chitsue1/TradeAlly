@@ -937,10 +937,10 @@ Analytics:
             # Header
             lines = ["📊 ბოლო 20 სიგნალი\n"]
 
-            closed = [s for s in recent if s.get("profit_pct") is not None]
-            pending = [s for s in recent if s.get("profit_pct") is None]
+            closed = [s for s in recent if s.get("status") in ("win", "loss")]
+            pending = [s for s in recent if s.get("status") not in ("win", "loss")]
 
-            wins = sum(1 for s in closed if s["profit_pct"] > 0)
+            wins = sum(1 for s in closed if s.get("status") == "win" or (s.get("profit_pct") or 0) > 0)
             total_closed = len(closed)
             win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
 
@@ -967,7 +967,8 @@ Analytics:
                     time_str = sent_at[:16] if sent_at else "?"
 
                 # 100$ simulation
-                if profit is not None:
+                status_val = sig.get("status")
+                if profit is not None and status_val in ("win", "loss"):
                     sim_val  = 100 * (1 + profit / 100)
                     sim_diff = sim_val - 100
                     sim_str  = f"${sim_val:.1f} ({sim_diff:+.1f}$)"

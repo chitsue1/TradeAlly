@@ -51,8 +51,8 @@ class SentSignal:
     expected_profit_max: float
 
     # Additional
-    tier: str
-    message_text: str  # რას დაწერა telegram-ში
+    tier: str = "BLUE_CHIP"
+    message_text: str = ""  # რას დაწერა telegram-ში
 
 @dataclass
 class SignalResult:

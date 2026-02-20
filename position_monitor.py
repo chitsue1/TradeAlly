@@ -17,6 +17,12 @@ from typing import Optional, Dict
 
 from config import get_tier_risk, ANTHROPIC_API_KEY
 
+try:
+    from signal_history_db import SignalHistoryDB, SignalResult, SignalStatus
+    SIG_HISTORY_AVAILABLE = True
+except Exception:
+    SIG_HISTORY_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # AI Exit Evaluator — optional
@@ -74,6 +80,14 @@ class PositionMonitor:
 
         # Track which positions already got AI exit advice (avoid spam)
         self._exit_advised: set = set()
+
+        # Signal history DB for recording exits
+        self.signal_history_db = None
+        if SIG_HISTORY_AVAILABLE:
+            try:
+                self.signal_history_db = SignalHistoryDB()
+            except Exception:
+                pass
 
         logger.info(f"✅ PositionMonitor v2.0 | interval={scan_interval}s | "
                     f"AI Exit: {'✅' if self.ai_exit else '❌'} | "
@@ -301,6 +315,30 @@ class PositionMonitor:
                 logger.debug(f"📝 Memory updated: {symbol}")
             except Exception as e:
                 logger.error(f"❌ Memory update error: {e}")
+
+        # ── Signal history DB result ──────────────────────────────────────
+        if self.signal_history_db:
+            try:
+                pos = self.exit_handler.active_positions.get(symbol)
+                if pos and pos.get("signal_id"):
+                    is_win = exit_analysis.profit_pct > 0
+                    from datetime import datetime
+                    result = SignalResult(
+                        signal_id=pos["signal_id"],
+                        symbol=symbol,
+                        actual_entry_price=pos["entry_price"],
+                        entry_time=pos.get("entry_time", datetime.now().isoformat()),
+                        exit_price=exit_price,
+                        exit_time=exit_time,
+                        exit_reason=exit_reason.value,
+                        profit_pct=exit_analysis.profit_pct,
+                        profit_usd=exit_analysis.profit_pct,
+                        days_held=exit_analysis.hold_duration_hours / 24,
+                        status=SignalStatus.CLOSED_WIN if is_win else SignalStatus.CLOSED_LOSS,
+                    )
+                    self.signal_history_db.record_signal_result(result)
+            except Exception as e:
+                logger.error(f"❌ signal_history result error: {e}")
 
         # ── Close position ────────────────────────────────────────────────
         self.exit_handler.close_position(symbol, exit_analysis)

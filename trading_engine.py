@@ -33,6 +33,13 @@ from strategies.opportunistic_strategy import OpportunisticStrategy
 from strategies.swing_strategy import SwingStrategy
 from exit_signals_handler import ExitSignalsHandler
 from sell_signal_message_generator import SellSignalMessageGenerator
+
+try:
+    from signal_history_db import SignalHistoryDB, SentSignal, SignalResult, SignalStatus
+    SIGNAL_HISTORY_AVAILABLE = True
+except Exception as e:
+    SIGNAL_HISTORY_AVAILABLE = False
+    logger.warning(f"⚠️ SignalHistoryDB not available: {e}")
 from position_monitor import PositionMonitor
 
 logger = logging.getLogger(__name__)
@@ -185,6 +192,15 @@ class TradingEngine:
         # ── State ─────────────────────────────────────────────────────────
         self.active_positions = self._load_positions()
         self.position_monitor = None
+
+        # Signal history DB (for /results command)
+        self.signal_history_db = None
+        if SIGNAL_HISTORY_AVAILABLE:
+            try:
+                self.signal_history_db = SignalHistoryDB()
+                logger.info("✅ SignalHistoryDB ready")
+            except Exception as e:
+                logger.error(f"❌ SignalHistoryDB init failed: {e}")
         self._vol_cache: Dict[str, List[float]] = {}
 
         self.stats = {
@@ -366,6 +382,26 @@ class TradingEngine:
             )
 
             await self.telegram_handler.broadcast_signal(message=msg, asset=signal.symbol)
+
+            # Record in signal history DB (for /results)
+            if self.signal_history_db:
+                try:
+                    sent_sig = SentSignal(
+                        symbol=signal.symbol,
+                        strategy=signal.strategy_type.value,
+                        entry_price=signal.entry_price,
+                        target_price=signal.entry_price * (1 + tgt_pct / 100),
+                        stop_loss_price=signal.entry_price * (1 - stop_pct / 100),
+                        sent_time=datetime.now().isoformat(),
+                        confidence_score=signal.confidence_score,
+                        ai_approved=(ai_eval is not None),
+                        expected_profit_min=tgt_pct * 0.5,
+                        expected_profit_max=tgt_pct,
+                        tier=tier,
+                    )
+                    self.signal_history_db.record_sent_signal(sent_sig)
+                except Exception as e:
+                    logger.warning(f"⚠️ signal_history_db record failed: {e}")
 
             self.daily_tracker.record(tier)
 
