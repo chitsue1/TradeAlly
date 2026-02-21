@@ -504,8 +504,8 @@ Analytics:
                 text += f"{sig['symbol']} ({sig['strategy']})\n"
                 text += f"Entry: ${sig['entry_price']:.4f}\n"
                 text += f"Target: ${sig['target_price']:.4f}\n"
-                text += f"Stop: ${sig['stop_loss']:.4f}\n"
-                text += f"Conf: {sig['confidence']:.0f}%\n\n"
+                text += f"Stop: ${sig.get('stop_loss_price', 0):.4f}\n"
+                text += f"Conf: {sig.get('confidence_score', 0):.0f}%\n\n"
 
             await update.message.reply_text(safe_text(text))
 
@@ -589,11 +589,13 @@ Analytics:
             text = f"Recent {len(recent)}:\n\n"
 
             for sig in recent:
-                emoji = "+" if sig['outcome'] == 'SUCCESS' else "-" if sig['outcome'] == 'FAILURE' else "?"
-                profit_str = f"{sig['profit']:+.2f}%" if sig['profit'] is not None else "Pending"
+                emoji = "+" if sig.get('outcome') == 'SUCCESS' else "-" if sig.get('outcome') == 'FAILURE' else "?"
+                pf = sig.get('final_profit_pct')
+                profit_str = f"{pf:+.2f}%" if pf is not None else "Pending"
+                conf = sig.get('confidence_score', 0)
 
                 text += f"{emoji} {sig['symbol']} ({sig['strategy']})\n"
-                text += f"   {profit_str} | {sig['confidence']:.0f}%\n"
+                text += f"   {profit_str} | {conf:.0f}%\n"
 
             await update.message.reply_text(safe_text(text))
 
@@ -690,12 +692,12 @@ Analytics:
 
             for sig in recent:
                 emoji = "+" if sig['status'] == 'win' else "-" if sig['status'] == 'loss' else "?"
-                profit_str = f"{sig['profit_pct']:+.2f}%" if sig['profit_pct'] else "Pending"
+                profit_str = f"{sig['profit_pct']:+.2f}%" if sig.get('profit_pct') is not None else "Pending"
 
                 text += f"{emoji} {sig['symbol']} ({sig['strategy']})\n"
                 text += f"Entry: ${sig['entry_price']:.4f}\n"
                 text += f"P&L: {profit_str}\n"
-                text += f"Hold: {sig['days_held']:.1f}d\n"
+                text += f"Hold: {(sig['days_held'] or 0):.1f}d\n"
                 text += f"Conf: {sig['confidence_score']:.0f}%\n\n"
 
             await update.message.reply_text(safe_text(text))
@@ -945,7 +947,7 @@ Analytics:
             win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
 
             if total_closed > 0:
-                avg_profit = sum(s["profit_pct"] for s in closed) / total_closed
+                avg_profit = sum((s["profit_pct"] or 0) for s in closed) / total_closed
                 lines.append(
                     f"✅ {wins}W / ❌ {total_closed - wins}L  |  Win rate: {win_rate:.0f}%"
                 )

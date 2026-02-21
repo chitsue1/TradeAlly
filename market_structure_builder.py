@@ -12,17 +12,28 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MarketStructure:
-    nearest_support: float
-    nearest_resistance: float
-    support_strength: int
-    resistance_strength: int
-    volume_trend: str
-    volume_momentum: float
-    structure_quality: float
-    support_distance_pct: float
+    # Core structure
+    nearest_support:         float
+    nearest_resistance:      float
+    support_strength:        float   # 0-100
+    resistance_strength:     float   # 0-100
+    volume_trend:            str     # "increasing"/"decreasing"/"neutral"
+    volume_momentum:         float
+    structure_quality:       float   # 0-100
+    support_distance_pct:    float
     resistance_distance_pct: float
-    pivot_point: float
-    midpoint: float
+    pivot_point:             float
+    midpoint:                float
+    # Multi-TF fields (used by strategies — defaults so old code still works)
+    momentum_score:          float = 0.0
+    trend_strength:          float = 50.0
+    volatility_regime:       str   = "normal"
+    volatility_percentile:   float = 50.0
+    tf_1h_trend:             str   = "neutral"
+    tf_4h_trend:             str   = "neutral"
+    tf_1d_trend:             str   = "neutral"
+    alignment_score:         float = 50.0
+    volume_percentile:       float = 50.0
 
 
 class MarketStructureBuilder:
@@ -75,18 +86,47 @@ class MarketStructureBuilder:
         pivot_point = (nearest_support + nearest_resistance) / 2
         midpoint = (nearest_support + current_price + nearest_resistance) / 3
 
+        # Derive extra fields for strategy compatibility
+        try:
+            trend_str = str(getattr(market_regime, 'regime', '')).lower()
+            if 'bull' in trend_str or 'uptrend' in trend_str:
+                tf_trend = "bullish"
+                trend_strength_val = 65.0
+            elif 'bear' in trend_str or 'downtrend' in trend_str:
+                tf_trend = "bearish"
+                trend_strength_val = 35.0
+            else:
+                tf_trend = "neutral"
+                trend_strength_val = 50.0
+            vol_pct = float(getattr(market_regime, 'volatility_percentile', 50.0))
+        except Exception:
+            tf_trend = "neutral"
+            trend_strength_val = 50.0
+            vol_pct = 50.0
+
+        momentum = min(max(volume_momentum, -100), 100)
+
         structure = MarketStructure(
             nearest_support=round(nearest_support, 4),
             nearest_resistance=round(nearest_resistance, 4),
-            support_strength=int(support_strength_count),
-            resistance_strength=int(resistance_strength_count),
+            support_strength=float(support_strength_count),
+            resistance_strength=float(resistance_strength_count),
             volume_trend=volume_trend,
             volume_momentum=round(volume_momentum, 1),
             structure_quality=round(quality_score, 1),
             support_distance_pct=round(support_distance_pct, 2),
             resistance_distance_pct=round(resistance_distance_pct, 2),
             pivot_point=round(pivot_point, 4),
-            midpoint=round(midpoint, 4)
+            midpoint=round(midpoint, 4),
+            momentum_score=round(momentum, 1),
+            trend_strength=round(trend_strength_val, 1),
+            volatility_regime="high" if vol_pct > 75 else "low" if vol_pct < 25 else "normal",
+            volatility_percentile=round(vol_pct, 1),
+            tf_1h_trend=tf_trend,
+            tf_4h_trend=tf_trend,
+            tf_1d_trend=tf_trend,
+            alignment_score=65.0 if tf_trend == "bullish" else 35.0 if tf_trend == "bearish" else 50.0,
+            volume_percentile=min(95.0, max(5.0, 50.0 + volume_momentum / 2)),
         )
 
         logger.info(

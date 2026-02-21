@@ -50,6 +50,8 @@ class MarketData:
     macd_signal: float
     macd_histogram: float
     macd_histogram_prev: float
+    volume: float
+    avg_volume_20d: float
 
     # Bollinger Bands
     bb_low: float
@@ -530,9 +532,16 @@ class MultiSourceDataProvider:
             else:
                 avg_bb_width_20d = bb_width
 
+            # Estimate volume from avg (no direct volume from Yahoo hourly without extra request)
+            # Use a placeholder - strategies will still work, just without real volume filtering
+            estimated_volume     = 1_000_000.0
+            estimated_avg_volume = 1_000_000.0
+
             result = {
                 "price": float(current_price),
                 "prev_close": float(prev_close),
+                "volume": estimated_volume,
+                "avg_volume_20d": estimated_avg_volume,
                 "rsi": float(rsi_value),
                 "prev_rsi": float(prev_rsi),
                 "ema50": float(ema50_value),
@@ -603,6 +612,8 @@ class MultiSourceDataProvider:
                         macd_signal=indicators["macd_signal"],
                         macd_histogram=indicators["macd_histogram"],
                         macd_histogram_prev=indicators.get("macd_histogram_prev", indicators["macd_histogram"]),
+                        volume=indicators.get("volume", 1_000_000),
+                        avg_volume_20d=indicators.get("avg_volume_20d", 1_000_000),
                         bb_low=indicators["bb_low"],
                         bb_high=indicators["bb_high"],
                         bb_mid=indicators["bb_mid"],

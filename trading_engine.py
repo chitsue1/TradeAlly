@@ -34,15 +34,16 @@ from strategies.swing_strategy import SwingStrategy
 from exit_signals_handler import ExitSignalsHandler
 from sell_signal_message_generator import SellSignalMessageGenerator
 
+logger = logging.getLogger(__name__)  # MUST be before any try/except that uses it
+
 try:
     from signal_history_db import SignalHistoryDB, SentSignal, SignalResult, SignalStatus
     SIGNAL_HISTORY_AVAILABLE = True
 except Exception as e:
     SIGNAL_HISTORY_AVAILABLE = False
     logger.warning(f"⚠️ SignalHistoryDB not available: {e}")
-from position_monitor import PositionMonitor
 
-logger = logging.getLogger(__name__)
+from position_monitor import PositionMonitor
 
 # ── Signal Memory ─────────────────────────────────────────────────────────────
 try:

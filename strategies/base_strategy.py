@@ -61,36 +61,10 @@ class MarketRegime(Enum):
 # MARKET STRUCTURE DATACLASS
 # ═══════════════════════════════════════════════════════════════════════════
 
-@dataclass
-class MarketStructure:
-    """
-    ბაზრის სტრუქტურის ანალიზი
-
-    მოიცავს support/resistance, volume profile, momentum indicators
-    """
-    # Price levels
-    nearest_support: float
-    nearest_resistance: float
-    support_strength: float  # 0-100
-    resistance_strength: float  # 0-100
-
-    # Volume analysis
-    volume_trend: str  # "increasing", "decreasing", "stable"
-    volume_percentile: float  # Current volume vs 20-day average
-
-    # Momentum
-    momentum_score: float  # -100 to +100
-    trend_strength: float  # 0-100
-
-    # Volatility
-    volatility_regime: str  # "low", "normal", "high", "extreme"
-    volatility_percentile: float
-
-    # Multi-timeframe alignment
-    tf_1h_trend: str  # "bullish", "bearish", "neutral"
-    tf_4h_trend: str
-    tf_1d_trend: str
-    alignment_score: float  # 0-100 (all timeframes agree?)
+# MarketStructure imported from market_structure_builder (single source of truth)
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from market_structure_builder import MarketStructure
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TRADING SIGNAL - ENHANCED
