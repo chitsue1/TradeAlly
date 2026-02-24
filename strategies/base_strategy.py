@@ -140,16 +140,7 @@ class TradingSignal:
             return self._format_basic_message()
 
     def _format_buy_message(self) -> str:
-        """ლამაზი BUY სიგნალი"""
-
-        # Strategy badge
-        strategy_badges = {
-            "long_term": "🔵",
-            "swing": "🟢",
-            "scalping": "⚡",
-            "opportunistic": "🔥"
-        }
-        badge = strategy_badges.get(self.strategy_type.value, "📊")
+        """სიგნალის შეტყობინება — ქართული, სუფთა სტრუქტურა"""
 
         strategy_names = {
             "long_term": "Long-Term Investment",
@@ -157,31 +148,35 @@ class TradingSignal:
             "scalping": "Scalping",
             "opportunistic": "Breakout Play"
         }
+        strategy_badges = {
+            "long_term": "🔵",
+            "swing": "🟢",
+            "scalping": "⚡",
+            "opportunistic": "🔥"
+        }
+
+        badge = strategy_badges.get(self.strategy_type.value, "📊")
         strategy_name = strategy_names.get(self.strategy_type.value, "Trade")
 
-        # Calculate percentages
         profit_pct = ((self.target_price - self.entry_price) / self.entry_price) * 100
-        loss_pct = abs((self.stop_loss_price - self.entry_price) / self.entry_price) * 100
+        loss_pct   = abs((self.stop_loss_price - self.entry_price) / self.entry_price) * 100
 
-        # ════════════════════════════════════════════════════════════
-        # BUILD MESSAGE
-        # ════════════════════════════════════════════════════════════
+        msg = f"{badge} {strategy_name}\n"
+        msg += f"📈 იყიდეთ {self.symbol}\n\n"
 
-        msg = f"{badge} **{strategy_name}**\n"
-        msg += f"**📈 იყიდეთ {self.symbol}**\n\n"
-
-        # Why now? (Primary reason - already personalized by strategies)
-        msg += "💡 **რატომ ახლა?**\n"
+        # Why now
+        msg += f"💡 რატომ ახლა?\n"
         msg += f"{self.primary_reason}\n\n"
 
         # Technical factors
-        msg += "📊 **ტექნიკური ფაქტორები:**\n"
-        for reason in self.supporting_reasons[:5]:
-            msg += f"{reason}\n"
-        msg += "\n"
+        if self.supporting_reasons:
+            msg += "📊 ტექნიკური ფაქტორები:\n"
+            for reason in self.supporting_reasons[:5]:
+                msg += f"  {reason}\n"
+            msg += "\n"
 
-        # Trading plan
-        msg += "💰 **სავაჭრო გეგმა:**\n"
+        # Trade plan
+        msg += "💰 სავაჭრო გეგმა:\n"
         msg += f"• შესვლა: ${self.entry_price:.4f}\n"
         msg += f"• სამიზნე: ${self.target_price:.4f} (+{profit_pct:.1f}%)\n"
         msg += f"• Stop-Loss: ${self.stop_loss_price:.4f} (-{loss_pct:.1f}%)\n"
@@ -192,14 +187,7 @@ class TradingSignal:
 
         msg += f"• Holding: {self.expected_hold_duration}\n\n"
 
-        # Risk warnings (if important)
-        if self.risk_factors and self.risk_level in ["HIGH", "EXTREME"]:
-            msg += "⚠️ **რისკები:**\n"
-            for factor in self.risk_factors[:3]:
-                msg += f"{factor}\n"
-            msg += "\n"
-
-        # Footer - Confidence & Risk
+        # Confidence footer
         risk_emoji = {
             "LOW": "🟢",
             "MEDIUM": "🟡",
@@ -207,8 +195,9 @@ class TradingSignal:
             "EXTREME": "🔴"
         }.get(self.risk_level, "⚪")
 
-        msg += f"⚡ **Confidence:** {self.confidence_score:.0f}% | "
-        msg += f"**Risk:** {risk_emoji} {self.risk_level}"
+        msg += f"Confidence: {self.confidence_score:.0f}% | Risk: {risk_emoji} {self.risk_level}\n"
+        msg += "━━━━━━━━━━━━━━\n"
+        msg += "არ გესმით რა არის RSI, EMA, Stop-Loss? გამოიყენეთ: /guide"
 
         return msg
 

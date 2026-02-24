@@ -49,88 +49,68 @@ def safe_text(text: str) -> str:
 # MESSAGE TEMPLATES
 # ═══════════════════════════════════════════════════════════════════════════
 
-WELCOME_MSG_TEMPLATE = """Welcome to AI Trading Bot!
+WELCOME_MSG_TEMPLATE = """👋 გამარჯობა @{username}!
 
-Hello {username}!
+🤖 Trade Ally — AI Crypto Trading Bot
 
-Our Service:
-- 56 Crypto Monitoring 24/7
-- AI Risk Evaluator Active
-- 4 Professional Strategies
-- Seamless Payments
+📊 მონიტორინგი:
+• 57 კრიპტოვალუტა
+• 5 კატეგორია (Blue Chips → Meme Coins)
+• 15-წუთიანი სკანირება
 
-Price: 150₾ / month
+💰 ფასი: 150₾ / თვე
 
-Get Started: /subscribe
-Learn: /guide
-"""
+ბრძანებები:
+/subscribe — გამოწერა
+/mystatus — სტატუსი
+/tiers — კატეგორიები
+/results — სიგნალების ისტორია
+/guide — სახელმძღვანელო
 
-TIER_DESCRIPTIONS = """TIER DESCRIPTIONS
+დახმარებისთვის: @Kagurashinakami"""
 
-TIER 1: BLUE CHIP
-- BTC, ETH, SOL, BNB
-- High Liquidity
-- Low Volatility
-- Stable Trading
+TIER_DESCRIPTIONS = """📊 კრიპტო კატეგორიები
 
-TIER 2: HIGH GROWTH
-- AVAX, LINK, POLKADOT, etc
-- Medium Liquidity
-- Medium Volatility
+🔵 Tier 1 — Blue Chip
+BTC, ETH, BNB, SOL, XRP...
+→ დაბალი რისკი | Stop: -5% | Target: +10%
 
-TIER 3: MEME COINS
-- DOGE, SHIB, PEPE, etc
-- Hot, Fast
-- High Risk, High Reward
+🟢 Tier 2 — High Growth
+NEAR, ARB, SUI, INJ, APT...
+→ საშუალო რისკი | Stop: -6% | Target: +14%
 
-TIER 4: NARRATIVE
-- AI tokens, DeFi, Layer2
-- Development
-- Medium Risk
+🟡 Tier 3 — Meme Coins
+DOGE, PEPE, WIF, BONK...
+→ მაღალი რისკი | Stop: -7% | Target: +20%
 
-TIER 5: EMERGING
-- New Projects
-- Ultimate Risk
-- Ultimate Upside
-"""
+🟣 Tier 4 — Narrative
+RNDR, FET, TAO, ONDO...
+→ საშუალო-მაღალი | Stop: -6.5% | Target: +16%
 
-PAYMENT_INSTRUCTIONS = """PAYMENT INSTRUCTIONS
+🔴 Tier 5 — Emerging
+SEI, TIA, TON, ZK...
+→ ყველაზე მაღალი | Stop: -8% | Target: +20%
 
-Access: 150₾ / month
+⚠️ არ არის ფინანსური რჩევა. DYOR."""
 
-Payment Methods:
+PAYMENT_INSTRUCTIONS = """💳 გამოწერის გააქტიურება
 
-1. TBC Bank Transfer
-   Recipient: [NAME]
-   Account: [ACCOUNT]
-   Reference: Your user_id
+თანხა: 150₾ / თვე
 
-2. UNISTREAM
-   Number: [NUMBER]
-   Message: Your user_id
+━━━━━━━━━━━━━━━━━━
+🏦 საქართველოს ბანკი (BOG)
+ანგარიში: GE70BG0000000538913702
+დანიშნულება: შენი Telegram ID
 
-3. BOG / USDT
-   Send BOG/USDT
-   Reference: Your user_id
+━━━━━━━━━━━━━━━━━━
+გადახდის შემდეგ:
+1. ქვითრის ფოტო გამოაგზავნე პირდაპირ ამ ჩატში
+2. ადმინი დაადასტურებს 24 საათში
+3. Premium — 30 დღე
 
-After Payment:
-1. Take photo of proof
-2. Upload photo here
-3. Admin confirms (1-24 hours)
+კითხვები: @Kagurashinakami"""
 
-Then:
-- Premium Active 30 days
-- AI Signals On
-- Analytics Access
-
-Questions? Contact @support
-"""
-
-GUIDE_FOOTER = (
-    "\n\nRemember: DYOR (Do Your Own Research)\n"
-    "Risk Disclaimer: Not financial advice\n"
-    "Tip: Always use stop-loss!\n"
-)
+GUIDE_FOOTER = "\n\n⚠️ DYOR — არ არის ფინანსური რჩევა. Always use Stop-Loss."
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TELEGRAM HANDLER v3.0 SAFE
@@ -253,10 +233,16 @@ class TelegramHandler:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        username = update.effective_user.username or "friend"
+        username = update.effective_user.username or "მეგობარო"
         message = WELCOME_MSG_TEMPLATE.format(username=username)
-        message += "\n\n/results — ბოლო 20 სიგნალის შედეგები"
-        await update.message.reply_text(message)
+
+        keyboard = [[
+            InlineKeyboardButton("✉️ Send Message", url="https://t.me/Kagurashinakami")
+        ]]
+        await update.message.reply_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = """Help
@@ -277,39 +263,40 @@ Admin Commands:
         await update.message.reply_text(help_text)
 
     async def cmd_guide(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        guide_text = """AI Trading Guide
+        guide_text = """📖 სახელმძღვანელო — როგორ მუშაობს ბოტი
 
-RSI (Relative Strength Index)
-- <30 = Oversold (Buy signal)
-- 30-70 = Normal
-- >70 = Overbought (Sell signal)
+━━━━━━━━━━━━━━━━━━
+🤖 რა არის Trade Ally?
 
-EMA 200 (Exponential Moving Average)
-- Price > EMA200 = Uptrend
-- Price < EMA200 = Downtrend
-- Long-term trend indicator
+ბოტი 24/7 სკანირებს 57 კრიპტოვალუტას. ყოველ 15 წუთში ამოწმებს ტექნიკურ ინდიკატორებს და როცა ძლიერი სიგნალი ჩნდება — გამოგიგზავნის შეტყობინებას.
 
-Bollinger Bands (BB)
-- BB Low touch = Possible bounce
-- BB High touch = Possible decline
-- Volatility measure
+სანამ სიგნალი გამოვა, მას Claude AI ამოწმებს — ის აფასებს რისკს, timing-ს და R:R Ratio-ს. მხოლოდ გამართული სიგნალი მოვა შენამდე.
 
-MACD (Moving Average Convergence)
-- Histogram > 0 = Uptrend momentum
-- Histogram < 0 = Downtrend momentum
-- Crossover = Trend change
+━━━━━━━━━━━━━━━━━━
+📊 ინდიკატორების მნიშვნელობა:
 
-Stop-Loss & Take-Profit
-- Stop-Loss = Limit losses
-- Take-Profit = Lock in gains
-- Always use!
+RSI — ბაზრის ძალა (0-100)
+• 30-ზე დაბლა = oversold → ყიდვის ზონა
+• 70-ზე მაღლა = overbought → სიფრთხილე
 
-AI Score
-- 0-30: Weak
-- 30-45: Medium
-- 45-65: Good
-- 65+: Strong
-"""
+EMA50 / EMA200 — ტრენდის ხაზი
+• EMA50 > EMA200 = Golden Cross → ზრდის სიგნალი
+
+MACD — momentum
+• ჰისტოგრამა პლიუსში = ზრდის ძალა
+
+Stop-Loss — ზარალის ლიმიტი
+• ეს ფასზე ქვემოთ ავტომატურად გადის → ფულის დაცვა
+
+━━━━━━━━━━━━━━━━━━
+💡 Confidence Score — რა ნიშნავს?
+
+60-70% — კარგი სიგნალი
+70-80% — ძლიერი სიგნალი
+80%+ — AI დიდ ნდობას გამოხატავს
+
+━━━━━━━━━━━━━━━━━━
+⚠️ DYOR — ბოტი ეხმარება, გადაწყვეტილება შენია."""
         await update.message.reply_text(guide_text)
 
     async def cmd_tiers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -326,18 +313,17 @@ AI Score
             days_left = (expires_date - datetime.now().date()).days
 
             status_msg = (
-                f"Status: Premium Active\n\n"
-                f"Activated: {activated}\n"
-                f"Expires: {expires}\n"
-                f"Days left: {days_left}\n\n"
-                f"Signals: Active\n"
-                f"Notifications: On"
+                f"✅ Premium გააქტიურებულია\n\n"
+                f"გააქტიურდა: {activated}\n"
+                f"ვადა: {expires}\n"
+                f"დარჩა: {days_left} დღე\n\n"
+                f"სიგნალები: აქტიური ✅"
             )
         else:
             status_msg = (
-                "No Active Subscription\n\n"
-                "Price: 150₾ / month\n\n"
-                "Get premium: /subscribe"
+                "❌ გამოწერა არ გაქვს\n\n"
+                "ფასი: 150₾ / თვე\n\n"
+                "გააქტიურება: /subscribe"
             )
 
         await update.message.reply_text(status_msg)
@@ -401,10 +387,10 @@ Analytics:
             try:
                 await self.bot.send_message(
                     user_id,
-                    f"Premium Activated!\n\n"
-                    f"Valid for {days} days\n"
-                    f"Signals: Active\n"
-                    f"Get Started: /guide"
+                    f"🎉 Premium გააქტიურდა!\n\n"
+                    f"ვადა: {days} დღე\n"
+                    f"სიგნალები: აქტიური ✅\n\n"
+                    f"სახელმძღვანელო: /guide"
                 )
             except:
                 pass
@@ -832,8 +818,8 @@ Analytics:
         self._save_json(self.payment_requests, self.payment_requests_file)
 
         await update.message.reply_text(
-            "Payment received!\n\n"
-            "Awaiting admin approval (1-24 hours)"
+            "✅ ქვითარი მიღებულია!\n\n"
+            "ადმინი განიხილავს 24 საათში."
         )
 
         keyboard = [[
@@ -868,24 +854,24 @@ Analytics:
             try:
                 await self.bot.send_message(
                     target_id,
-                    "Payment Approved!\n\n"
-                    "Premium activated for 30 days\n"
-                    "Signals: Active\n\n"
-                    "Get Started: /guide"
+                    "🎉 გადახდა დადასტურდა!\n\n"
+                    "Premium გააქტიურდა 30 დღით.\n"
+                    "სიგნალები: აქტიური ✅\n\n"
+                    "დამატებითი ინფო: /guide"
                 )
             except:
                 pass
 
         else:
             await query.edit_message_caption(
-                caption=f"Rejected\n\nUser: {target_id}"
+                caption=f"❌ უარყოფილია\n\nUser: {target_id}"
             )
 
             try:
                 await self.bot.send_message(
                     target_id,
-                    "Payment Rejected\n\n"
-                    "Please contact support"
+                    "❌ გადახდა ვერ დადასტურდა\n\n"
+                    "კითხვებისთვის: @Kagurashinakami"
                 )
             except:
                 pass

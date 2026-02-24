@@ -264,11 +264,12 @@ class MultiSourceDataProvider:
     # ✅ YAHOO FINANCE (PRIORITY #1)
     # ═══════════════════════════════════════════════════════════════
 
-    async def _fetch_yahoo(self, symbol: str) -> Optional[pd.Series]:
+    async def _fetch_yahoo(self, symbol: str) -> Optional[Dict]:
         """
         ✅ Yahoo Finance - PRIORITY #1
 
         ყველაზე სანდო და სწრაფი წყარო
+        Returns dict with 'closes' and 'volumes'
         """
         if self._is_circuit_open("yahoo"):
             return None
@@ -303,10 +304,20 @@ class MultiSourceDataProvider:
                             return None
 
                         indicators = result[0].get("indicators", {}).get("quote", [{}])[0]
-                        closes = [c for c in indicators.get("close", []) if c is not None]
+                        closes_raw = indicators.get("close", [])
+                        volumes_raw = indicators.get("volume", [])
 
-                        if len(closes) < 200:
+                        # Filter out None values keeping index alignment
+                        paired = [(c, v) for c, v in zip(closes_raw, volumes_raw)
+                                  if c is not None and np.isfinite(c) and c > 0]
+
+                        if len(paired) < 200:
                             return None
+
+                        paired = paired[-200:]
+                        closes = [p[0] for p in paired]
+                        volumes = [float(p[1]) if p[1] is not None and np.isfinite(float(p[1])) else 0.0
+                                   for p in paired]
 
                         last_price = closes[-1]
                         if last_price <= 0 or not np.isfinite(last_price):
@@ -314,8 +325,8 @@ class MultiSourceDataProvider:
                             return None
 
                         self._record_success("yahoo")
-                        logger.info(f"✅ Yahoo: {symbol} @ ${last_price:.8f}")
-                        return pd.Series(closes[-200:])
+                        logger.info(f"✅ Yahoo: {symbol} @ ${last_price:.8f} | vol={volumes[-1]:,.0f}")
+                        return {"closes": pd.Series(closes), "volumes": volumes}
 
             except asyncio.TimeoutError:
                 self._record_failure("yahoo")
@@ -332,11 +343,12 @@ class MultiSourceDataProvider:
     # ✅ COINGECKO (FALLBACK #2) - FIXED
     # ═══════════════════════════════════════════════════════════════
 
-    async def _fetch_coingecko(self, symbol: str) -> Optional[pd.Series]:
+    async def _fetch_coingecko(self, symbol: str) -> Optional[Dict]:
         """
         ✅ CoinGecko - FALLBACK #2
 
         ფიქსირებული რეიტ-ლიმიტებისთვის
+        Returns dict with 'closes' and 'volumes'
         """
         if self._is_circuit_open("coingecko"):
             return None
@@ -374,20 +386,26 @@ class MultiSourceDataProvider:
 
                         data = await resp.json()
                         prices = data.get("prices", [])
+                        total_volumes = data.get("total_volumes", [])
 
                         if len(prices) < 200:
                             return None
 
-                        closes = [float(price[1]) for price in prices[-200:]]
-                        last_price = closes[-1]
+                        closes = [float(p[1]) for p in prices[-200:]]
+                        # CoinGecko total_volumes are per-candle in USD
+                        if len(total_volumes) >= 200:
+                            volumes = [float(v[1]) for v in total_volumes[-200:]]
+                        else:
+                            volumes = [float(total_volumes[-1][1])] * 200 if total_volumes else [1_000_000.0] * 200
 
+                        last_price = closes[-1]
                         if last_price <= 0 or not np.isfinite(last_price):
                             self._record_failure("coingecko")
                             return None
 
                         self._record_success("coingecko")
-                        logger.info(f"✅ CoinGecko: {symbol} @ ${last_price:.8f}")
-                        return pd.Series(closes)
+                        logger.info(f"✅ CoinGecko: {symbol} @ ${last_price:.8f} | vol={volumes[-1]:,.0f}")
+                        return {"closes": pd.Series(closes), "volumes": volumes}
 
             except asyncio.TimeoutError:
                 self._record_failure("coingecko")
@@ -403,11 +421,12 @@ class MultiSourceDataProvider:
     # ✅ BINANCE (FALLBACK #3) - FIXED
     # ═══════════════════════════════════════════════════════════════
 
-    async def _fetch_binance(self, symbol: str) -> Optional[pd.Series]:
+    async def _fetch_binance(self, symbol: str) -> Optional[Dict]:
         """
         ✅ Binance - FALLBACK #3
 
         ფიქსირებული სიმბოლოებისთვის
+        Returns dict with 'closes' and 'volumes'
         """
         if self._is_circuit_open("binance"):
             return None
@@ -442,8 +461,9 @@ class MultiSourceDataProvider:
                         if len(data) < 200:
                             return None
 
-                        # ✅ Close price is index 4
+                        # ✅ Close price is index 4, Volume is index 5
                         closes = [float(candle[4]) for candle in data]
+                        volumes = [float(candle[5]) for candle in data]
                         last_price = closes[-1]
 
                         if last_price <= 0 or not np.isfinite(last_price):
@@ -451,8 +471,8 @@ class MultiSourceDataProvider:
                             return None
 
                         self._record_success("binance")
-                        logger.info(f"✅ Binance: {symbol} @ ${last_price:.8f}")
-                        return pd.Series(closes)
+                        logger.info(f"✅ Binance: {symbol} @ ${last_price:.8f} | vol={volumes[-1]:,.2f}")
+                        return {"closes": pd.Series(closes), "volumes": volumes}
 
             except asyncio.TimeoutError:
                 self._record_failure("binance")
@@ -471,7 +491,8 @@ class MultiSourceDataProvider:
     def _calculate_indicators(
         self, 
         close_series: pd.Series, 
-        symbol: str
+        symbol: str,
+        volumes: Optional[list] = None,
     ) -> Optional[Dict[str, float]]:
         """
         ✅ COMPLETE INDICATOR SET - All strategies supported
@@ -532,16 +553,29 @@ class MultiSourceDataProvider:
             else:
                 avg_bb_width_20d = bb_width
 
-            # Estimate volume from avg (no direct volume from Yahoo hourly without extra request)
-            # Use a placeholder - strategies will still work, just without real volume filtering
-            estimated_volume     = 1_000_000.0
-            estimated_avg_volume = 1_000_000.0
+            # ✅ REAL VOLUME — from data source (Yahoo/CoinGecko/Binance)
+            if volumes and len(volumes) >= 20:
+                clean_volumes = [v for v in volumes if v is not None and np.isfinite(v) and v >= 0]
+                if len(clean_volumes) >= 20:
+                    current_volume  = float(clean_volumes[-1])
+                    avg_volume_20d  = float(np.mean(clean_volumes[-20:]))
+                    # Edge case: if current candle volume is 0 (partial candle), use previous
+                    if current_volume == 0 and len(clean_volumes) >= 2:
+                        current_volume = float(clean_volumes[-2])
+                else:
+                    current_volume = 1_000_000.0
+                    avg_volume_20d = 1_000_000.0
+            else:
+                # Fallback — no volume data available
+                current_volume = 1_000_000.0
+                avg_volume_20d = 1_000_000.0
+                logger.debug(f"{symbol}: No volume data — using fallback 1:1 ratio")
 
             result = {
                 "price": float(current_price),
                 "prev_close": float(prev_close),
-                "volume": estimated_volume,
-                "avg_volume_20d": estimated_avg_volume,
+                "volume": current_volume,
+                "avg_volume_20d": avg_volume_20d,
                 "rsi": float(rsi_value),
                 "prev_rsi": float(prev_rsi),
                 "ema50": float(ema50_value),
@@ -557,10 +591,12 @@ class MultiSourceDataProvider:
                 "avg_bb_width_20d": float(avg_bb_width_20d),
             }
 
+            vol_ratio = current_volume / avg_volume_20d if avg_volume_20d > 0 else 1.0
             logger.info(
                 f"✅ {symbol}: ${result['price']:.6f} | "
                 f"RSI:{result['rsi']:.1f}({result['prev_rsi']:.1f}) | "
-                f"EMA50:${result['ema50']:.4f}"
+                f"EMA50:${result['ema50']:.4f} | "
+                f"Vol:{vol_ratio:.2f}x"
             )
 
             return result
@@ -578,6 +614,7 @@ class MultiSourceDataProvider:
         ✅ INTELLIGENT FALLBACK CASCADE
 
         Priority: Yahoo → CoinGecko → Binance
+        Each source returns {"closes": pd.Series, "volumes": list}
         """
 
         # Check cache
@@ -594,37 +631,50 @@ class MultiSourceDataProvider:
         ]
 
         for source_name, fetch_func in sources:
-            close_series = await fetch_func(symbol)
+            raw = await fetch_func(symbol)
 
-            if close_series is not None and len(close_series) >= 200:
-                indicators = self._calculate_indicators(close_series, symbol)
+            if raw is None:
+                continue
 
-                if indicators:
-                    market_data = MarketData(
-                        symbol=symbol,
-                        price=indicators["price"],
-                        prev_close=indicators["prev_close"],
-                        rsi=indicators["rsi"],
-                        prev_rsi=indicators["prev_rsi"],
-                        ema50=indicators["ema50"],
-                        ema200=indicators["ema200"],
-                        macd=indicators["macd"],
-                        macd_signal=indicators["macd_signal"],
-                        macd_histogram=indicators["macd_histogram"],
-                        macd_histogram_prev=indicators.get("macd_histogram_prev", indicators["macd_histogram"]),
-                        volume=indicators.get("volume", 1_000_000),
-                        avg_volume_20d=indicators.get("avg_volume_20d", 1_000_000),
-                        bb_low=indicators["bb_low"],
-                        bb_high=indicators["bb_high"],
-                        bb_mid=indicators["bb_mid"],
-                        bb_width=indicators["bb_width"],
-                        avg_bb_width_20d=indicators["avg_bb_width_20d"],
-                        source=source_name,
-                        timestamp=time.time()
-                    )
+            # Support both old pd.Series return and new dict return
+            if isinstance(raw, dict):
+                close_series = raw.get("closes")
+                volumes      = raw.get("volumes", None)
+            else:
+                close_series = raw
+                volumes = None
 
-                    self.cache[symbol] = (market_data, time.time())
-                    return market_data
+            if close_series is None or len(close_series) < 200:
+                continue
+
+            indicators = self._calculate_indicators(close_series, symbol, volumes)
+
+            if indicators:
+                market_data = MarketData(
+                    symbol=symbol,
+                    price=indicators["price"],
+                    prev_close=indicators["prev_close"],
+                    rsi=indicators["rsi"],
+                    prev_rsi=indicators["prev_rsi"],
+                    ema50=indicators["ema50"],
+                    ema200=indicators["ema200"],
+                    macd=indicators["macd"],
+                    macd_signal=indicators["macd_signal"],
+                    macd_histogram=indicators["macd_histogram"],
+                    macd_histogram_prev=indicators.get("macd_histogram_prev", indicators["macd_histogram"]),
+                    volume=indicators.get("volume", 1_000_000),
+                    avg_volume_20d=indicators.get("avg_volume_20d", 1_000_000),
+                    bb_low=indicators["bb_low"],
+                    bb_high=indicators["bb_high"],
+                    bb_mid=indicators["bb_mid"],
+                    bb_width=indicators["bb_width"],
+                    avg_bb_width_20d=indicators["avg_bb_width_20d"],
+                    source=source_name,
+                    timestamp=time.time()
+                )
+
+                self.cache[symbol] = (market_data, time.time())
+                return market_data
 
         logger.error(f"❌ All sources failed: {symbol}")
         return None
