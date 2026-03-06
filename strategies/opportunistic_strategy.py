@@ -300,7 +300,7 @@ class OpportunisticStrategy(BaseStrategy):
         # MARKET STRUCTURE SCORING (PHASE 1 ADD)
         # ════════════════════════════════════════════════════════════════════
 
-        structure_score = 50
+        structure_score = 0  # P2/#8 — base starts at 0
         structure_bonus = 0
 
         if market_structure:

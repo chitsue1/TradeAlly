@@ -1,17 +1,7 @@
 """
-═══════════════════════════════════════════════════════════════════════════════
-EXIT SIGNALS HANDLER - PRODUCTION v1.0
-═══════════════════════════════════════════════════════════════════════════════
-
-🎯 სიზუსტე:
-✅ რეალ-დროში position monitoring
-✅ Target/Stop Loss დეტექცია
-✅ Profit/Loss გაანგარიშება
-✅ Performance Analytics
-✅ 100$ ეკვივალენტი რეპორტი
-
-AUTHOR: Trading System Architecture Team
-DATE: 2024-02-14
+EXIT SIGNALS HANDLER - PRODUCTION v2.0 FIXED
+P1 FIX #5: Trailing stop — target-ის 50%+ progress-ზე ჩაირთვება
+v1.0 შენარჩუნებული: TARGET_HIT, STOP_LOSS, TIMEOUT, ExitAnalysis, 100$ sim
 """
 
 import logging
@@ -19,437 +9,342 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict
 from dataclasses import dataclass
 from enum import Enum
-import asyncio
 
 logger = logging.getLogger(__name__)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# DATA MODELS
-# ═══════════════════════════════════════════════════════════════════════════
 
 class ExitReason(Enum):
-    """გაყიდვის მიზეზი"""
-    TARGET_HIT = "target_hit"
-    STOP_LOSS = "stop_loss"
-    TIMEOUT = "timeout"
-    MANUAL = "manual"
-    PARTIAL_EXIT = "partial_exit"
+    TARGET_HIT    = "target_hit"
+    STOP_LOSS     = "stop_loss"
+    TIMEOUT       = "timeout"
+    MANUAL        = "manual"
+    PARTIAL_EXIT  = "partial_exit"
+    TRAILING_STOP = "trailing_stop"   # ✅ P1/#5 NEW
+
 
 class ExitSignalType(Enum):
-    """გაყიდვის ტიპი"""
-    FULL_EXIT = "full_exit"
+    FULL_EXIT    = "full_exit"
     PARTIAL_EXIT = "partial_exit"
-    TAKE_PROFIT = "take_profit"
+    TAKE_PROFIT  = "take_profit"
+
 
 @dataclass
 class ExitAnalysis:
-    """გაყიდვის დეტალური ანალიზი"""
-    # Exit details
-    exit_reason: ExitReason
-    exit_price: float
-    exit_time: str
-
-    # P&L
-    entry_price: float
-    profit_usd: float
-    profit_pct: float
-
-    # Simulation (100$ base)
-    initial_investment: float = 100.0
-    final_value: float = 0.0
-    simulated_profit_usd: float = 0.0
-    simulated_profit_pct: float = 0.0
-
-    # Strategy performance
-    expected_profit_min: float = 0.0
-    expected_profit_max: float = 0.0
-    expectation_met: bool = False
-
-    # Additional metrics
-    max_profit_during_hold: float = 0.0
+    exit_reason:               ExitReason
+    exit_price:                float
+    exit_time:                 str
+    entry_price:               float
+    profit_usd:                float
+    profit_pct:                float
+    initial_investment:        float = 100.0
+    final_value:               float = 0.0
+    simulated_profit_usd:      float = 0.0
+    simulated_profit_pct:      float = 0.0
+    expected_profit_min:       float = 0.0
+    expected_profit_max:       float = 0.0
+    expectation_met:           bool  = False
+    max_profit_during_hold:    float = 0.0
     max_profit_pct_during_hold: float = 0.0
-    hold_duration_hours: float = 0.0
-    hold_duration_human: str = ""
+    hold_duration_hours:       float = 0.0
+    hold_duration_human:       str   = ""
+    signal_confidence:         float = 0.0
+    ai_approved:               bool  = False
+    realistic_target_met:      bool  = False
 
-    # Signal quality
-    signal_confidence: float = 0.0
-    ai_approved: bool = False
-    realistic_target_met: bool = False
-
-# ═══════════════════════════════════════════════════════════════════════════
-# EXIT SIGNALS HANDLER
-# ═══════════════════════════════════════════════════════════════════════════
 
 class ExitSignalsHandler:
     """
-    EXIT SIGNALS HANDLER - PRODUCTION GRADE
-
-    ✅ სიზუსტე:
-    - Position monitoring (real-time)
-    - Exit condition detection
-    - Profit/Loss calculation
-    - 100$ simulation
-    - Performance analytics
+    EXIT SIGNALS HANDLER v2.0 FIXED
+    ✅ P1/#5 — Trailing stop: activates when profit >= 50% of target
+               Trail distance = 40% of profit gained so far
     """
 
     def __init__(self):
-        self.active_positions = {}  # symbol -> position data
-        self.exit_history = []  # closed positions
-        self.price_history = {}  # price tracking for max profit
+        self.active_positions: Dict = {}
+        self.exit_history:     list = []
+        self.price_history:    Dict = {}
+        logger.info("✅ ExitSignalsHandler v2.0 initialized (trailing stop enabled)")
 
-        logger.info("✅ ExitSignalsHandler initialized")
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # POSITION REGISTRATION
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Position Registration ────────────────────────────────────────────
 
     def register_position(
         self,
-        symbol: str,
-        entry_price: float,
-        target_price: float,
-        stop_loss_price: float,
-        entry_time: str,
-        signal_confidence: float,
+        symbol:             str,
+        entry_price:        float,
+        target_price:       float,
+        stop_loss_price:    float,
+        entry_time:         str,
+        signal_confidence:  float,
         expected_profit_min: float,
         expected_profit_max: float,
-        strategy_type: str,
-        signal_id: Optional[int] = None,
-        ai_approved: bool = False
+        strategy_type:      str,
+        signal_id:          Optional[int] = None,
+        ai_approved:        bool = False,
     ):
-        """ახალი position რეგისტრაცია"""
-
         self.active_positions[symbol] = {
-            'entry_price': entry_price,
-            'target_price': target_price,
-            'stop_loss_price': stop_loss_price,
-            'entry_time': entry_time,
-            'signal_confidence': signal_confidence,
-            'expected_profit_min': expected_profit_min,
-            'expected_profit_max': expected_profit_max,
-            'strategy_type': strategy_type,
-            'signal_id': signal_id,
-            'ai_approved': ai_approved,
-            'max_price': entry_price,  # Track highest price
-            'min_price': entry_price,  # Track lowest price
-            'status': 'OPEN'
+            "entry_price":        entry_price,
+            "target_price":       target_price,
+            "stop_loss_price":    stop_loss_price,
+            "entry_time":         entry_time,
+            "signal_confidence":  signal_confidence,
+            "expected_profit_min": expected_profit_min,
+            "expected_profit_max": expected_profit_max,
+            "strategy_type":      strategy_type,
+            "signal_id":          signal_id,
+            "ai_approved":        ai_approved,
+            "max_price":          entry_price,
+            "min_price":          entry_price,
+            "status":             "OPEN",
+            # ✅ P1/#5 — trailing stop state
+            "trailing_active":    False,
+            "trailing_stop":      stop_loss_price,  # will be updated dynamically
         }
 
-        # Initialize price history
-        if symbol not in self.price_history:
-            self.price_history[symbol] = []
-
+        self.price_history.setdefault(symbol, [])
         self.price_history[symbol].append({
-            'price': entry_price,
-            'time': entry_time,
-            'type': 'ENTRY'
+            "price": entry_price, "time": entry_time, "type": "ENTRY"
         })
 
         logger.info(
             f"📝 Position registered: {symbol}\n"
-            f"   Entry: ${entry_price:.4f}\n"
-            f"   Target: ${target_price:.4f} ({expected_profit_max:.1f}%)\n"
-            f"   Stop: ${stop_loss_price:.4f}"
+            f"   Entry: ${entry_price:.4f} | Target: ${target_price:.4f} | "
+            f"Stop: ${stop_loss_price:.4f}"
         )
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # POSITION MONITORING
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Price Update ─────────────────────────────────────────────────────
 
     def update_price(self, symbol: str, current_price: float, timestamp: str):
-        """ფასის განახლება (მუდმივი ზეწნა)"""
-
         if symbol not in self.active_positions:
             return
-
         pos = self.active_positions[symbol]
+        if current_price > pos["max_price"]:
+            pos["max_price"] = current_price
+        if current_price < pos["min_price"]:
+            pos["min_price"] = current_price
 
-        # Track price extremes
-        if current_price > pos['max_price']:
-            pos['max_price'] = current_price
-        if current_price < pos['min_price']:
-            pos['min_price'] = current_price
+        # ✅ P1/#5 — update trailing stop if active
+        self._update_trailing_stop(pos, current_price)
 
-        # Add to history
-        if symbol in self.price_history:
-            self.price_history[symbol].append({
-                'price': current_price,
-                'time': timestamp,
-                'type': 'UPDATE'
-            })
+        self.price_history.setdefault(symbol, []).append({
+            "price": current_price, "time": timestamp, "type": "UPDATE"
+        })
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # EXIT CONDITION DETECTION
-    # ═══════════════════════════════════════════════════════════════════════
+    def _update_trailing_stop(self, pos: Dict, current_price: float):
+        """
+        ✅ P1/#5 — Trailing stop logic:
+        Activates when profit >= 50% of target distance.
+        Trail = 40% of max profit gained (locks in 60% of peak gains).
+        """
+        entry  = pos["entry_price"]
+        target = pos["target_price"]
+        profit_dist = target - entry  # total target range
+        if profit_dist <= 0:
+            return
+
+        current_profit = current_price - entry
+        progress = current_profit / profit_dist  # 0..1..2
+
+        if progress >= 0.50:
+            # Activate trailing stop
+            if not pos["trailing_active"]:
+                pos["trailing_active"] = True
+                logger.info(
+                    f"🎯 Trailing stop ACTIVATED: {pos.get('symbol', '?')} @ "
+                    f"${current_price:.4f} ({progress*100:.0f}% of target)"
+                )
+
+            # Trail = max_price - 40% of (max_price - entry)
+            max_profit_gained = pos["max_price"] - entry
+            trail_dist        = max_profit_gained * 0.40
+            new_trail         = pos["max_price"] - trail_dist
+
+            # Only move trailing stop UP, never down
+            if new_trail > pos["trailing_stop"]:
+                pos["trailing_stop"] = new_trail
+                logger.debug(
+                    f"⬆️ Trailing stop raised: ${new_trail:.4f} "
+                    f"(max: ${pos['max_price']:.4f})"
+                )
+
+    # ─── Exit Condition Detection ─────────────────────────────────────────
 
     def check_exit_condition(
         self,
-        symbol: str,
+        symbol:        str,
         current_price: float,
-        current_time: str
+        current_time:  str,
     ) -> Tuple[Optional[ExitReason], Optional[float]]:
-        """
-        EXIT პირობის შემოწმება
-
-        Returns:
-            (exit_reason, exit_price) ან (None, None) თუ არ არის exit
-        """
 
         if symbol not in self.active_positions:
             return None, None
 
         pos = self.active_positions[symbol]
+        pos["symbol"] = symbol  # ensure symbol stored for logging
 
-        # ✅ 1. TARGET HIT
-        if current_price >= pos['target_price']:
+        # 1. TARGET HIT
+        if current_price >= pos["target_price"]:
             logger.info(f"🎯 {symbol} TARGET HIT: ${current_price:.4f}")
             return ExitReason.TARGET_HIT, current_price
 
-        # 🔴 2. STOP LOSS HIT
-        if current_price <= pos['stop_loss_price']:
-            logger.warning(f"🛑 {symbol} STOP LOSS HIT: ${current_price:.4f}")
+        # 2. ✅ P1/#5 — TRAILING STOP (checked before fixed stop loss)
+        if pos["trailing_active"] and current_price <= pos["trailing_stop"]:
+            locked_pct = (pos["trailing_stop"] - pos["entry_price"]) / pos["entry_price"] * 100
+            logger.info(
+                f"🎯 {symbol} TRAILING STOP: ${current_price:.4f} "
+                f"| Locked: +{locked_pct:.1f}%"
+            )
+            return ExitReason.TRAILING_STOP, current_price
+
+        # 3. FIXED STOP LOSS
+        if current_price <= pos["stop_loss_price"]:
+            logger.warning(f"🛑 {symbol} STOP LOSS: ${current_price:.4f}")
             return ExitReason.STOP_LOSS, current_price
 
-        # ⏰ 3. TIMEOUT (მაქსიმალური hold duration)
-        entry_time = datetime.fromisoformat(pos['entry_time'])
-        current_time_dt = datetime.fromisoformat(current_time)
-        hold_hours = (current_time_dt - entry_time).total_seconds() / 3600
-
-        # Long-term: 72h, Swing: 240h, Scalping: 1h, Opportunistic: 168h
-        max_hold_hours = {
-            'long_term': 72 * 7,  # 1 კვირა
-            'swing': 240,         # 10 დღე
-            'scalping': 1,        # 1 საათი
-            'opportunistic': 168  # 7 დღე
+        # 4. TIMEOUT
+        max_hold = {
+            "long_term":     504,   # 21 days
+            "swing":         240,   # 10 days
+            "scalping":      1,     # 1 hour
+            "opportunistic": 168,   # 7 days
         }
-
-        strategy = pos['strategy_type']
-        max_hours = max_hold_hours.get(strategy, 240)
-
-        if hold_hours > max_hours:
-            logger.warning(
-                f"⏰ {symbol} TIMEOUT: {hold_hours:.1f}h / {max_hours}h"
-            )
-            return ExitReason.TIMEOUT, current_price
+        try:
+            entry_dt  = datetime.fromisoformat(pos["entry_time"])
+            curr_dt   = datetime.fromisoformat(current_time)
+            hold_hrs  = (curr_dt - entry_dt).total_seconds() / 3600
+            max_hrs   = max_hold.get(pos["strategy_type"], 240)
+            if hold_hrs > max_hrs:
+                logger.warning(f"⏰ {symbol} TIMEOUT: {hold_hrs:.1f}h / {max_hrs}h")
+                return ExitReason.TIMEOUT, current_price
+        except Exception:
+            pass
 
         return None, None
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # EXIT ANALYSIS
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Exit Analysis (updated to include TRAILING_STOP reason) ──────────
 
     def analyze_exit(
         self,
-        symbol: str,
-        exit_reason: ExitReason,
-        exit_price: float,
-        exit_time: str,
-        current_price_history: Dict = None
+        symbol:       str,
+        exit_reason:  ExitReason,
+        exit_price:   float,
+        exit_time:    str,
+        current_price_history: Dict = None,
     ) -> Optional[ExitAnalysis]:
-        """
-        გაყიდვის დეტალური ანალიზი
-        """
 
         if symbol not in self.active_positions:
             return None
 
-        pos = self.active_positions[symbol]
-        entry_price = pos['entry_price']
-        entry_time = datetime.fromisoformat(pos['entry_time'])
-        exit_time_dt = datetime.fromisoformat(exit_time)
+        pos         = self.active_positions[symbol]
+        entry_price = pos["entry_price"]
+        entry_time  = datetime.fromisoformat(pos["entry_time"])
+        exit_dt     = datetime.fromisoformat(exit_time)
 
-        # ════════════════════════════════════════════════════════════════════
-        # 1. PROFIT/LOSS CALCULATION
-        # ════════════════════════════════════════════════════════════════════
+        profit_pct  = ((exit_price - entry_price) / entry_price) * 100
+        profit_usd  = exit_price - entry_price
 
-        profit_pct = ((exit_price - entry_price) / entry_price) * 100
+        init_inv    = 100.0
+        shares      = init_inv / entry_price
+        final_val   = shares * exit_price
+        sim_profit  = final_val - init_inv
+        sim_pct     = (sim_profit / init_inv) * 100
 
-        # Assume 1 unit was bought (for USD profit calculation)
-        # In reality, this would be: position_size * profit_pct / 100
-        profit_usd = 1.0 * (exit_price - entry_price)
+        exp_min = pos["expected_profit_min"]
+        exp_max = pos["expected_profit_max"]
 
-        # ════════════════════════════════════════════════════════════════════
-        # 2. 100$ SIMULATION
-        # ════════════════════════════════════════════════════════════════════
+        max_price    = pos["max_price"]
+        max_pct      = ((max_price - entry_price) / entry_price) * 100
 
-        initial_investment = 100.0
-        shares_bought = initial_investment / entry_price
-        final_value = shares_bought * exit_price
-        simulated_profit_usd = final_value - initial_investment
-        simulated_profit_pct = (simulated_profit_usd / initial_investment) * 100
+        hold_dur     = exit_dt - entry_time
+        hold_hrs     = hold_dur.total_seconds() / 3600
 
-        # ════════════════════════════════════════════════════════════════════
-        # 3. EXPECTATION ANALYSIS
-        # ════════════════════════════════════════════════════════════════════
+        trail_note = ""
+        if exit_reason == ExitReason.TRAILING_STOP:
+            trail_note = f" [trailing stop locked +{profit_pct:.1f}%]"
 
-        expected_min = pos['expected_profit_min']
-        expected_max = pos['expected_profit_max']
-        expectation_met = expected_min <= profit_pct <= expected_max
-        realistic_target_met = profit_pct >= (expected_min * 0.8)  # 80% of min
+        logger.info(
+            f"📊 EXIT: {symbol}{trail_note}\n"
+            f"   Entry: ${entry_price:.4f} → Exit: ${exit_price:.4f}\n"
+            f"   Profit: {profit_pct:+.2f}% | Max during hold: {max_pct:+.2f}%\n"
+            f"   $100 sim: ${sim_profit:+.2f} ({sim_pct:+.2f}%)\n"
+            f"   Hold: {self._fmt(hold_dur)} | Reason: {exit_reason.value}"
+        )
 
-        # ════════════════════════════════════════════════════════════════════
-        # 4. MAX PROFIT DURING HOLD
-        # ════════════════════════════════════════════════════════════════════
-
-        max_price = pos['max_price']
-        max_profit_pct = ((max_price - entry_price) / entry_price) * 100
-        max_profit_usd = 1.0 * (max_price - entry_price)
-
-        # ════════════════════════════════════════════════════════════════════
-        # 5. HOLD DURATION
-        # ════════════════════════════════════════════════════════════════════
-
-        hold_duration = exit_time_dt - entry_time
-        hold_hours = hold_duration.total_seconds() / 3600
-        hold_duration_human = self._format_duration(hold_duration)
-
-        # ════════════════════════════════════════════════════════════════════
-        # 6. BUILD EXIT ANALYSIS
-        # ════════════════════════════════════════════════════════════════════
-
-        exit_analysis = ExitAnalysis(
-            # Exit details
+        return ExitAnalysis(
             exit_reason=exit_reason,
             exit_price=exit_price,
             exit_time=exit_time,
-
-            # P&L
             entry_price=entry_price,
             profit_usd=profit_usd,
             profit_pct=profit_pct,
-
-            # Simulation
-            initial_investment=initial_investment,
-            final_value=final_value,
-            simulated_profit_usd=simulated_profit_usd,
-            simulated_profit_pct=simulated_profit_pct,
-
-            # Expectations
-            expected_profit_min=expected_min,
-            expected_profit_max=expected_max,
-            expectation_met=expectation_met,
-
-            # Max profit
-            max_profit_during_hold=max_profit_usd,
-            max_profit_pct_during_hold=max_profit_pct,
-
-            # Duration
-            hold_duration_hours=hold_hours,
-            hold_duration_human=hold_duration_human,
-
-            # Quality
-            signal_confidence=pos['signal_confidence'],
-            ai_approved=pos['ai_approved'],
-            realistic_target_met=realistic_target_met
+            initial_investment=init_inv,
+            final_value=final_val,
+            simulated_profit_usd=sim_profit,
+            simulated_profit_pct=sim_pct,
+            expected_profit_min=exp_min,
+            expected_profit_max=exp_max,
+            expectation_met=(exp_min <= profit_pct <= exp_max),
+            max_profit_during_hold=(max_price - entry_price),
+            max_profit_pct_during_hold=max_pct,
+            hold_duration_hours=hold_hrs,
+            hold_duration_human=self._fmt(hold_dur),
+            signal_confidence=pos["signal_confidence"],
+            ai_approved=pos["ai_approved"],
+            realistic_target_met=(profit_pct >= exp_min * 0.8),
         )
 
-        logger.info(
-            f"📊 EXIT ANALYSIS: {symbol}\n"
-            f"   Entry: ${entry_price:.4f} → Exit: ${exit_price:.4f}\n"
-            f"   Profit: {profit_pct:+.2f}% (${profit_usd:+.2f})\n"
-            f"   100$ Simulation: ${simulated_profit_usd:+.2f} ({simulated_profit_pct:+.2f}%)\n"
-            f"   Max during hold: {max_profit_pct:+.2f}%\n"
-            f"   Hold: {hold_duration_human}\n"
-            f"   Expected: {expected_min:.1f}% - {expected_max:.1f}% | Met: {expectation_met}"
-        )
-
-        return exit_analysis
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # HELPER METHODS
-    # ═══════════════════════════════════════════════════════════════════════
-
-    def _format_duration(self, duration: timedelta) -> str:
-        """ხანგრძლივობის ლამაზი ფორმატირება"""
-        total_seconds = duration.total_seconds()
-
-        days = int(total_seconds // 86400)
-        hours = int((total_seconds % 86400) // 3600)
-        minutes = int((total_seconds % 3600) // 60)
-
+    def _fmt(self, dur: timedelta) -> str:
+        s = dur.total_seconds()
+        d = int(s // 86400); h = int((s%86400)//3600); m = int((s%3600)//60)
         parts = []
-        if days > 0:
-            parts.append(f"{days}d")
-        if hours > 0:
-            parts.append(f"{hours}h")
-        if minutes > 0:
-            parts.append(f"{minutes}m")
-
+        if d: parts.append(f"{d}d")
+        if h: parts.append(f"{h}h")
+        if m: parts.append(f"{m}m")
         return " ".join(parts) if parts else "< 1m"
 
     def close_position(self, symbol: str, exit_analysis: ExitAnalysis):
-        """Position დახურვა"""
-
         if symbol not in self.active_positions:
             return
-
         pos = self.active_positions[symbol]
-        pos['status'] = 'CLOSED'
-        pos['exit_analysis'] = exit_analysis
-
-        # Move to history
+        pos["status"] = "CLOSED"
         self.exit_history.append({
-            'symbol': symbol,
-            'entry_price': pos['entry_price'],
-            'exit_price': exit_analysis.exit_price,
-            'entry_time': pos['entry_time'],
-            'exit_time': exit_analysis.exit_time,
-            'profit_pct': exit_analysis.profit_pct,
-            'exit_reason': exit_analysis.exit_reason.value,
-            'strategy': pos['strategy_type'],
-            'analysis': exit_analysis
+            "symbol":      symbol,
+            "entry_price": pos["entry_price"],
+            "exit_price":  exit_analysis.exit_price,
+            "entry_time":  pos["entry_time"],
+            "exit_time":   exit_analysis.exit_time,
+            "profit_pct":  exit_analysis.profit_pct,
+            "exit_reason": exit_analysis.exit_reason.value,
+            "strategy":    pos["strategy_type"],
+            "analysis":    exit_analysis,
         })
-
-        # Remove from active
         del self.active_positions[symbol]
-
         logger.info(f"✅ Position closed: {symbol}")
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # STATISTICS
-    # ═══════════════════════════════════════════════════════════════════════
-
     def get_exit_statistics(self) -> Dict:
-        """სტატისტიკა დახურული positions-ების შესახებ"""
-
         if not self.exit_history:
-            return {
-                'total_exits': 0,
-                'successful': 0,
-                'failed': 0,
-                'avg_profit': 0,
-                'best_trade': 0,
-                'worst_trade': 0
-            }
-
-        profits = [e['profit_pct'] for e in self.exit_history]
+            return {"total_exits":0,"successful":0,"failed":0,
+                    "win_rate":0,"avg_profit":0,"best_trade":0,"worst_trade":0}
+        profits    = [e["profit_pct"] for e in self.exit_history]
         successful = sum(1 for p in profits if p > 0)
-        failed = len(profits) - successful
-
         return {
-            'total_exits': len(self.exit_history),
-            'successful': successful,
-            'failed': failed,
-            'win_rate': (successful / len(self.exit_history) * 100) if self.exit_history else 0,
-            'avg_profit': sum(profits) / len(profits) if profits else 0,
-            'best_trade': max(profits) if profits else 0,
-            'worst_trade': min(profits) if profits else 0,
-            'total_profit': sum(profits)
+            "total_exits": len(self.exit_history),
+            "successful":  successful,
+            "failed":      len(profits) - successful,
+            "win_rate":    successful / len(self.exit_history) * 100,
+            "avg_profit":  sum(profits) / len(profits),
+            "best_trade":  max(profits),
+            "worst_trade": min(profits),
+            "total_profit": sum(profits),
         }
 
     def get_active_positions_summary(self) -> str:
-        """აქტიური positions-ების summary"""
-
         if not self.active_positions:
             return "📭 არ არის აქტიური positions"
-
-        summary = "📊 **აქტიური Positions:**\n\n"
-
-        for symbol, pos in self.active_positions.items():
-            summary += f"**{symbol}**\n"
-            summary += f"├─ Entry: ${pos['entry_price']:.4f}\n"
-            summary += f"├─ Target: ${pos['target_price']:.4f}\n"
-            summary += f"├─ Stop: ${pos['stop_loss_price']:.4f}\n"
-            summary += f"└─ Status: {pos['status']}\n\n"
-
-        return summary
+        s = "📊 **აქტიური Positions:**\n\n"
+        for sym, pos in self.active_positions.items():
+            trail = f" 🎯 trail:${pos['trailing_stop']:.4f}" if pos.get("trailing_active") else ""
+            s += (f"**{sym}**\n"
+                  f"├─ Entry:  ${pos['entry_price']:.4f}\n"
+                  f"├─ Target: ${pos['target_price']:.4f}\n"
+                  f"└─ Stop:   ${pos['stop_loss_price']:.4f}{trail}\n\n")
+        return s

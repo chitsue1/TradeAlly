@@ -44,7 +44,7 @@ class SwingStrategy(BaseStrategy):
 
         # Configuration
         self.min_cooldown_hours = 96
-        self.min_confidence = 55.0
+        self.min_confidence = 60.0  # P2/#8
 
         # RSI thresholds (healthy momentum zone)
         self.rsi_min = 35
@@ -194,7 +194,7 @@ class SwingStrategy(BaseStrategy):
         # ════════════════════════════════════════════════════════════════════
 
         volume_ratio = volume / avg_volume if avg_volume > 0 else 1.0
-        volume_score = 50
+        volume_score = 0  # P2/#8 — base starts at 0
         volume_trend = "stable"
 
         if volume_ratio > 1.3:
@@ -204,7 +204,7 @@ class SwingStrategy(BaseStrategy):
             volume_score = 70
             volume_trend = "increasing"
         elif volume_ratio > 0.8:
-            volume_score = 50
+            volume_score = 0  # P2/#8 — base starts at 0
         else:
             volume_score = 30
             volume_trend = "decreasing"
@@ -217,7 +217,7 @@ class SwingStrategy(BaseStrategy):
         # MARKET STRUCTURE SCORING (PHASE 1 ADD)
         # ════════════════════════════════════════════════════════════════════
 
-        structure_score = 50
+        structure_score = 0  # P2/#8 — base starts at 0
         structure_bonus = 0
 
         if market_structure:

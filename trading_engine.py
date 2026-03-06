@@ -1,5 +1,25 @@
 """
-TRADING ENGINE v7.1 — PRODUCTION FIXED
+TRADING ENGINE v8.0 — ALL FIXES APPLIED
+═══════════════════════════════════════════════════════════════════════════════
+P0 FIXES:
+  #1 — startup preload: data_provider.preload_all_history() before first scan
+       scan_market blocked until preload_complete=True
+  #2 — volume_missing → skip signal (no mock, no random)
+  #3 — AI learning via SQLite (handled in ai_risk_evaluator.py)
+
+P1 FIXES:
+  #4 — multi-TF data from MarketData.multi_tf (real 1h+4h, no inference)
+       passed to market_structure_builder and strategies
+  #5 — trailing stop in exit_signals_handler.py (transparent to engine)
+  #6 — global symbol cooldown: only ONE active signal per symbol
+       across ALL strategies simultaneously
+
+P2 FIX #8 — confidence score: base_score starts at 0 (no hidden +50 floor)
+            MIN_CONFIDENCE thresholds raised by 5 points to compensate
+
+v7.1 შენარჩუნებული: all strategies, AI eval, daily limits, position monitoring,
+                     analytics, signal history, signal memory
+═══════════════════════════════════════════════════════════════════════════════
 """
 
 import asyncio
@@ -34,7 +54,7 @@ from strategies.swing_strategy import SwingStrategy
 from exit_signals_handler import ExitSignalsHandler
 from sell_signal_message_generator import SellSignalMessageGenerator
 
-logger = logging.getLogger(__name__)  # MUST be before any try/except that uses it
+logger = logging.getLogger(__name__)
 
 try:
     from signal_history_db import SignalHistoryDB, SentSignal, SignalResult, SignalStatus
@@ -45,7 +65,6 @@ except Exception as e:
 
 from position_monitor import PositionMonitor
 
-# ── Signal Memory ─────────────────────────────────────────────────────────────
 try:
     from signal_memory import SignalMemory
     MEMORY_AVAILABLE = True
@@ -53,7 +72,6 @@ except Exception as e:
     MEMORY_AVAILABLE = False
     logger.warning(f"⚠️ SignalMemory not available: {e}")
 
-# ── Optional imports ─────────────────────────────────────────────────────────
 try:
     from market_data import MultiSourceDataProvider
     MULTI_SOURCE_AVAILABLE = True
@@ -86,7 +104,7 @@ class Position:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# DAILY SIGNAL TRACKER
+# DAILY SIGNAL TRACKER (unchanged)
 # ═══════════════════════════════════════════════════════════════════════════
 
 class DailySignalTracker:
@@ -107,10 +125,10 @@ class DailySignalTracker:
     def can_send(self, tier: str) -> Tuple[bool, str]:
         self._reset_if_new_day()
         if self._total >= MAX_SIGNALS_PER_DAY:
-            return False, f"Daily limit reached ({MAX_SIGNALS_PER_DAY}/day)"
+            return False, f"Daily limit ({MAX_SIGNALS_PER_DAY}/day)"
         tier_limit = MAX_SIGNALS_PER_TIER_DAY.get(tier, 1)
         if self._tiers.get(tier, 0) >= tier_limit:
-            return False, f"{tier} limit reached ({tier_limit}/day)"
+            return False, f"{tier} limit ({tier_limit}/day)"
         return True, ""
 
     def record(self, tier: str):
@@ -122,19 +140,19 @@ class DailySignalTracker:
         self._reset_if_new_day()
         parts = " | ".join(
             f"{t}: {self._tiers.get(t,0)}/{MAX_SIGNALS_PER_TIER_DAY.get(t,1)}"
-            for t in ["BLUE_CHIP", "HIGH_GROWTH", "MEME", "NARRATIVE", "EMERGING"]
+            for t in ["BLUE_CHIP","HIGH_GROWTH","MEME","NARRATIVE","EMERGING"]
         )
         return f"Today: {self._total}/{MAX_SIGNALS_PER_DAY} | {parts}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TRADING ENGINE v7.1
+# TRADING ENGINE v8.0
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TradingEngine:
 
     def __init__(self):
-        logger.info("🔧 TradingEngine v7.1 initializing...")
+        logger.info("🔧 TradingEngine v8.0 initializing...")
 
         self.telegram_handler = None
         self.analytics_db     = AnalyticsDatabase(ANALYTICS_DB)
@@ -142,16 +160,18 @@ class TradingEngine:
         self.exit_handler     = ExitSignalsHandler()
         self.daily_tracker    = DailySignalTracker()
 
-        # Signal Memory
+        # ✅ P1/#6 — global symbol cooldown (symbol → last signal time)
+        self._global_symbol_last_signal: Dict[str, datetime] = {}
+        self._global_symbol_cooldown_hours: int = 6  # min hours between any signal on same symbol
+
         self.signal_memory = None
         if MEMORY_AVAILABLE:
             try:
                 self.signal_memory = SignalMemory()
                 logger.info("✅ SignalMemory ready")
             except Exception as e:
-                logger.error(f"❌ SignalMemory init failed: {e}")
+                logger.error(f"❌ SignalMemory init: {e}")
 
-        # ── Data provider ─────────────────────────────────────────────────
         self.data_provider    = None
         self.use_multi_source = False
 
@@ -165,9 +185,8 @@ class TradingEngine:
                 self.use_multi_source = True
                 logger.info("✅ Data provider ready")
             except Exception as e:
-                logger.error(f"❌ Data provider failed: {e}")
+                logger.error(f"❌ Data provider: {e}")
 
-        # ── AI evaluator ──────────────────────────────────────────────────
         self.ai_enabled   = False
         self.ai_evaluator = None
 
@@ -177,9 +196,8 @@ class TradingEngine:
                 self.ai_enabled   = True
                 logger.info("✅ AI Risk Evaluator ready")
             except Exception as e:
-                logger.error(f"❌ AI init failed: {e}")
+                logger.error(f"❌ AI init: {e}")
 
-        # ── Strategies ────────────────────────────────────────────────────
         self.regime_detector   = MarketRegimeDetector()
         self.structure_builder = MarketStructureBuilder()
         self.strategies = [
@@ -190,38 +208,35 @@ class TradingEngine:
         ]
         logger.info(f"✅ {len(self.strategies)} strategies loaded")
 
-        # ── State ─────────────────────────────────────────────────────────
-        self.active_positions = self._load_positions()
-        self.position_monitor = None
+        self.active_positions  = self._load_positions()
+        self.position_monitor  = None
 
-        # Signal history DB (for /results command)
         self.signal_history_db = None
         if SIGNAL_HISTORY_AVAILABLE:
             try:
                 self.signal_history_db = SignalHistoryDB()
                 logger.info("✅ SignalHistoryDB ready")
             except Exception as e:
-                logger.error(f"❌ SignalHistoryDB init failed: {e}")
-        self._vol_cache: Dict[str, List[float]] = {}
-        self._price_history_cache: Dict[str, List[float]] = {}  # ✅ Real price history cache
+                logger.error(f"❌ SignalHistoryDB init: {e}")
 
         self.stats = {
             "total_signals": 0, "buy_signals": 0, "sell_signals": 0,
             "ai_approved": 0,   "ai_rejected": 0,
             "rr_filtered": 0,   "daily_limited": 0,
+            "volume_blocked": 0,  # ✅ P0/#2
+            "warmup_skipped": 0,  # ✅ P0/#1
+            "global_cooldown": 0, # ✅ P1/#6
             "by_strategy": {s: 0 for s in ["long_term","swing","scalping","opportunistic"]},
             "by_tier":     {t: 0 for t in ["BLUE_CHIP","HIGH_GROWTH","MEME","NARRATIVE","EMERGING"]},
         }
 
         logger.info(
-            f"✅ Engine v7.1 ready | "
+            f"✅ Engine v8.0 ready | "
             f"Data: {'✅' if self.use_multi_source else '❌'} | "
             f"AI: {'✅' if self.ai_enabled else '❌'}"
         )
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # SETUP
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Setup ────────────────────────────────────────────────────────────
 
     def set_telegram_handler(self, handler):
         self.telegram_handler = handler
@@ -235,9 +250,7 @@ class TradingEngine:
             )
         logger.info("✅ Telegram linked + Position Monitor created")
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # DATA
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Data ─────────────────────────────────────────────────────────────
 
     async def fetch_data(self, symbol: str) -> Optional[Dict]:
         if not self.use_multi_source or not self.data_provider:
@@ -248,7 +261,7 @@ class TradingEngine:
                 return None
 
             result = {
-                "_symbol":             symbol,  # ✅ Pass symbol so _build_price_history can use cache
+                "_symbol":             symbol,
                 "price":               md.price,
                 "prev_close":          md.prev_close,
                 "rsi":                 md.rsi,
@@ -265,38 +278,57 @@ class TradingEngine:
                 "bb_width":            md.bb_width,
                 "avg_bb_width_20d":    md.avg_bb_width_20d,
                 "source":              md.source,
-                "volume":              getattr(md, "volume", self._mock_volume(symbol)),
-                "avg_volume_20d":      getattr(md, "avg_volume_20d", 1_000_000),
+                "volume":              md.volume,
+                "avg_volume_20d":      md.avg_volume_20d,
+                "volume_missing":      md.volume_missing,  # ✅ P0/#2
+                # ✅ P1/#4 — real multi-TF data
+                "_multi_tf":           md.multi_tf,
             }
-
-            # ✅ Cache real price history from data provider's internal cache
-            # The data provider stores closes internally during fetch; we store prev/current here
-            # On next scan, _build_price_history will have 2+ real anchors
-            ph = self._price_history_cache.setdefault(symbol, [])
-            if not ph or ph[-1] != md.price:
-                ph.append(md.price)
-                if len(ph) > 300:
-                    ph.pop(0)
-
             return result
         except Exception as e:
             logger.error(f"❌ fetch_data {symbol}: {e}")
             return None
 
-    def _mock_volume(self, symbol: str) -> float:
-        vol = 1_000_000 * np.random.uniform(0.6, 2.0)
-        cache = self._vol_cache.setdefault(symbol, [])
-        cache.append(vol)
-        if len(cache) > 20:
-            cache.pop(0)
-        return vol
+    # ─── P0/#1 — Real price history from data_provider ───────────────────
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # QUALITY GATE
-    # ═══════════════════════════════════════════════════════════════════════
+    def _get_price_history(self, symbol: str, length: int = 200) -> np.ndarray:
+        """
+        ✅ P0/#1 — uses real history from preload, never random noise.
+        Returns empty array if not preloaded yet.
+        """
+        if self.data_provider and hasattr(self.data_provider, "get_real_history"):
+            return self.data_provider.get_real_history(symbol, length)
+        return np.array([])
+
+    # ─── P1/#6 — Global Symbol Cooldown ──────────────────────────────────
+
+    def _check_global_cooldown(self, symbol: str) -> Tuple[bool, str]:
+        """
+        ✅ P1/#6 — One signal per symbol across all strategies.
+        Returns (can_send, reason).
+        """
+        last = self._global_symbol_last_signal.get(symbol)
+        if last is None:
+            return True, ""
+        hours_since = (datetime.now() - last).total_seconds() / 3600
+        if hours_since < self._global_symbol_cooldown_hours:
+            remaining = self._global_symbol_cooldown_hours - hours_since
+            return False, f"Global cooldown: {remaining:.1f}h remaining"
+        return True, ""
+
+    def _record_global_signal(self, symbol: str):
+        self._global_symbol_last_signal[symbol] = datetime.now()
+
+    # ─── Quality Gate ─────────────────────────────────────────────────────
 
     def _passes_quality_gate(self, signal, tier: str, data: Dict) -> Tuple[bool, str]:
         tier_risk = get_tier_risk(tier)
+
+        # ✅ P0/#2 — block if volume missing for volume-dependent strategies
+        strat_val = signal.strategy_type.value if hasattr(signal.strategy_type, "value") else str(signal.strategy_type)
+        if data.get("volume_missing", False) and strat_val in ("scalping", "opportunistic"):
+            self.stats["volume_blocked"] += 1
+            return False, f"Volume data missing — {strat_val} requires confirmed volume"
 
         if signal.confidence_score < tier_risk["min_confidence"]:
             return False, f"Confidence {signal.confidence_score:.0f}% < {tier_risk['min_confidence']}%"
@@ -312,13 +344,14 @@ class TradingEngine:
                 self.stats["rr_filtered"] += 1
                 return False, f"R:R {rr:.2f} < {MIN_RR_RATIO}"
 
-        rsi       = data.get("rsi", 50)
-        volume    = data.get("volume", 1)
-        avg_vol   = max(data.get("avg_volume_20d", 1), 1)
-        vol_ratio = volume / avg_vol
-
-        if rsi > 72 and vol_ratio > 2.5:
-            return False, f"Pump detected: RSI={rsi:.0f} Vol={vol_ratio:.1f}x"
+        # Pump detection (only if volume data available)
+        if not data.get("volume_missing", True):
+            rsi       = data.get("rsi", 50)
+            volume    = data.get("volume", 1)
+            avg_vol   = max(data.get("avg_volume_20d", 1), 1)
+            vol_ratio = volume / avg_vol
+            if rsi > 72 and vol_ratio > 2.5:
+                return False, f"Pump detected: RSI={rsi:.0f} Vol={vol_ratio:.1f}x"
 
         can_send, reason = self.daily_tracker.can_send(tier)
         if not can_send:
@@ -327,9 +360,7 @@ class TradingEngine:
 
         return True, "OK"
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # SIGNAL SENDING
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Signal Sending (unchanged interface) ────────────────────────────
 
     async def send_buy_signal(self, signal, ai_eval=None, tier: str = "HIGH_GROWTH"):
         if not self.telegram_handler:
@@ -351,8 +382,6 @@ class TradingEngine:
                 else:
                     ai_verdict = f"🧠 Claude AI: {dec}"
 
-                ai_conf = f"AI Confidence: {ai_eval.adjusted_confidence:.0f}%"
-
                 extras = []
                 if ai_eval.timing_advice in ("PERFECT_TIMING", "ENTER_NOW"):
                     extras.append("⏱ Timing: ახლა კარგი შესვლის წერტილია")
@@ -365,10 +394,9 @@ class TradingEngine:
                 if ai_eval.green_flags:
                     extras.append("🟢 " + " | ".join(ai_eval.green_flags[:2]))
 
-                ai_block = f"\n━━━━━━━━━━━━━━\n🤖 {ai_verdict}\n{ai_conf}"
+                ai_block = f"\n━━━━━━━━━━━━━━\n🤖 {ai_verdict}\nAI Confidence: {ai_eval.adjusted_confidence:.0f}%"
                 if extras:
                     ai_block += "\n" + "\n".join(extras)
-
                 msg += ai_block
 
             msg += (
@@ -376,13 +404,14 @@ class TradingEngine:
                 f"🔴 Stop Loss:  -{stop_pct:.1f}%\n"
                 f"🟢 Target:     +{tgt_pct:.1f}%\n"
                 f"📊 R:R Ratio:   1:{rr:.2f}\n"
+                f"🎯 Trailing Stop: ჩაირთვება +{tgt_pct*0.5:.1f}%-ზე\n"
             )
 
             signal_id = None
             try:
                 signal_id = self.analytics_db.record_signal(signal)
             except Exception as e:
-                logger.warning(f"⚠️ Analytics failed: {e}")
+                logger.warning(f"⚠️ Analytics: {e}")
 
             stop_price   = signal.entry_price * (1 - stop_pct / 100)
             target_price = signal.entry_price * (1 + tgt_pct  / 100)
@@ -403,40 +432,37 @@ class TradingEngine:
 
             await self.telegram_handler.broadcast_signal(message=msg, asset=signal.symbol)
 
-            # Record in signal history DB (for /results)
             if self.signal_history_db:
                 try:
-                    sent_sig = SentSignal(
+                    self.signal_history_db.record_sent_signal(SentSignal(
                         symbol=signal.symbol,
                         strategy=signal.strategy_type.value,
                         entry_price=signal.entry_price,
-                        target_price=signal.entry_price * (1 + tgt_pct / 100),
-                        stop_loss_price=signal.entry_price * (1 - stop_pct / 100),
+                        target_price=target_price,
+                        stop_loss_price=stop_price,
                         sent_time=datetime.now().isoformat(),
                         confidence_score=signal.confidence_score,
                         ai_approved=(ai_eval is not None),
                         expected_profit_min=tgt_pct * 0.5,
                         expected_profit_max=tgt_pct,
                         tier=tier,
-                    )
-                    self.signal_history_db.record_sent_signal(sent_sig)
+                    ))
                 except Exception as e:
-                    logger.warning(f"⚠️ signal_history_db record failed: {e}")
+                    logger.warning(f"⚠️ signal_history_db: {e}")
 
             self.daily_tracker.record(tier)
+            self._record_global_signal(signal.symbol)  # ✅ P1/#6
 
-            # Record in signal memory (for AI context + /results)
             if self.signal_memory:
                 try:
                     self.signal_memory.record_signal(
-                        symbol=signal.symbol,
-                        entry_price=signal.entry_price,
+                        symbol=signal.symbol, entry_price=signal.entry_price,
                         strategy=signal.strategy_type.value,
-                        confidence=signal.confidence_score,
-                        tier=tier,
+                        confidence=signal.confidence_score, tier=tier,
                     )
                 except Exception as e:
-                    logger.warning(f"⚠️ Memory record failed: {e}")
+                    logger.warning(f"⚠️ Memory record: {e}")
+
             self.active_positions.setdefault(
                 signal.symbol,
                 Position(signal.symbol, signal.entry_price, signal.strategy_type.value, signal_id)
@@ -466,7 +492,7 @@ class TradingEngine:
             if self.ai_evaluator and symbol in self.active_positions:
                 pos = self.active_positions[symbol]
                 try:
-                    outcome = TradeOutcome(
+                    self.ai_evaluator.record_outcome(TradeOutcome(
                         symbol=symbol,
                         strategy=pos.strategy_type,
                         tier=get_tier(symbol),
@@ -476,8 +502,7 @@ class TradingEngine:
                         hold_hours=exit_analysis.hold_duration_hours,
                         ai_decision="approved",
                         win=exit_analysis.profit_pct > 0,
-                    )
-                    self.ai_evaluator.record_outcome(outcome)
+                    ))
                 except Exception:
                     pass
 
@@ -487,11 +512,15 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"❌ send_sell_signal {symbol}: {e}")
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # MARKET SCAN
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Market Scan ──────────────────────────────────────────────────────
 
     async def scan_market(self, all_assets: List[str]):
+        # ✅ P0/#1 — block scan until preload complete
+        if self.data_provider and not self.data_provider.preload_complete:
+            logger.warning("⏳ SCAN SKIPPED — preload not complete yet")
+            self.stats["warmup_skipped"] += 1
+            return
+
         logger.info("=" * 65)
         logger.info(
             f"🔍 SCAN | {len(all_assets)} assets | "
@@ -505,11 +534,21 @@ class TradingEngine:
             logger.error("❌ SCAN ABORTED — no data provider")
             return
 
-        start = time.time()
-        success = fail = generated = filtered = ai_rejected = sent = 0
+        start    = time.time()
+        success  = fail = generated = filtered = ai_rejected = sent = 0
+        vol_blocked = global_cd = 0
 
         for symbol in all_assets:
             try:
+                # ✅ P1/#6 — global cooldown check
+                can_proceed, cd_reason = self._check_global_cooldown(symbol)
+                if not can_proceed:
+                    global_cd += 1
+                    self.stats["global_cooldown"] += 1
+                    logger.debug(f"⏭️ {symbol}: {cd_reason}")
+                    await asyncio.sleep(ASSET_DELAY)
+                    continue
+
                 data = await self.fetch_data(symbol)
                 if not data:
                     fail += 1
@@ -519,7 +558,12 @@ class TradingEngine:
                 price = data["price"]
                 tier  = get_tier(symbol)
 
-                price_history = self._build_price_history(data, 200)
+                # ✅ P0/#1 — real price history
+                price_history = self._get_price_history(symbol, 200)
+                if len(price_history) < 50:
+                    logger.debug(f"⚠️ {symbol}: insufficient history ({len(price_history)} pts) — skip")
+                    await asyncio.sleep(ASSET_DELAY)
+                    continue
 
                 regime = self.regime_detector.analyze_regime(
                     symbol, price, price_history,
@@ -527,15 +571,18 @@ class TradingEngine:
                     data["bb_low"], data["bb_high"]
                 )
 
+                # ✅ P1/#4 — pass real multi-TF data to structure builder
+                multi_tf = data.get("_multi_tf")
                 market_structure = self.structure_builder.build(
-                    symbol, price, data, regime, price_history.tolist()
+                    symbol, price, data, regime, list(price_history),
+                    multi_tf=multi_tf  # new kwarg (builder handles None gracefully)
                 )
 
                 technical = {k: data[k] for k in [
                     "rsi","prev_rsi","ema50","ema200",
                     "macd","macd_signal","macd_histogram","macd_histogram_prev",
                     "bb_low","bb_high","bb_mid","bb_width","avg_bb_width_20d",
-                    "volume","avg_volume_20d","prev_close"
+                    "volume","avg_volume_20d","prev_close","volume_missing",
                 ] if k in data}
 
                 best_signal   = None
@@ -555,7 +602,7 @@ class TradingEngine:
                             best_conf     = sig.confidence_score
                             best_strategy = strategy
                     except Exception as e:
-                        logger.warning(f"⚠️ Strategy error {symbol}: {e}")
+                        logger.warning(f"⚠️ Strategy err {symbol}: {e}")
                         continue
 
                 if not best_signal:
@@ -564,8 +611,11 @@ class TradingEngine:
 
                 generated += 1
 
+                # ✅ P0/#2 volume check + R:R + daily limit
                 passes, reason = self._passes_quality_gate(best_signal, tier, data)
                 if not passes:
+                    if "volume" in reason.lower():
+                        vol_blocked += 1
                     filtered += 1
                     logger.debug(f"⏭️ {symbol}: {reason}")
                     await asyncio.sleep(ASSET_DELAY)
@@ -583,7 +633,6 @@ class TradingEngine:
                 if self.ai_enabled and self.ai_evaluator and best_conf >= MIN_CONFIDENCE_FOR_AI:
                     logger.info(f"🧠 {symbol}: AI eval (conf {best_conf:.0f}%)...")
                     try:
-                        # Get symbol history for AI context
                         mem_summary = ""
                         if self.signal_memory:
                             try:
@@ -643,23 +692,38 @@ class TradingEngine:
         logger.info("=" * 65)
         logger.info(f"✅ SCAN DONE ({duration:.1f}min)")
         logger.info(f"📊 Success: {success}/{len(all_assets)} | Fail: {fail}")
-        logger.info(f"🔍 Generated: {generated} → Filtered: {filtered} → AI Rejected: {ai_rejected} → Sent: {sent}")
+        logger.info(
+            f"🔍 Generated: {generated} → "
+            f"Filtered: {filtered} (vol_blocked:{vol_blocked}) → "
+            f"Global CD: {global_cd} → "
+            f"AI Rejected: {ai_rejected} → Sent: {sent}"
+        )
         logger.info(self.daily_tracker.status())
         logger.info("=" * 65)
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # MAIN LOOP
-    # ═══════════════════════════════════════════════════════════════════════
+    # ─── Main Loop ────────────────────────────────────────────────────────
 
     async def run_forever(self):
         all_assets = CRYPTO + STOCKS + COMMODITIES
+
         logger.info(
             f"\n╔═══════════════════════════════════════╗\n"
-            f"║  TRADE ALLY ENGINE v7.1 — PRODUCTION  ║\n"
+            f"║  TRADE ALLY ENGINE v8.0 — PRODUCTION  ║\n"
             f"║  Data:  {'ACTIVE' if self.use_multi_source else 'INACTIVE':<10} AI: {'ACTIVE' if self.ai_enabled else 'INACTIVE':<10} ║\n"
             f"║  Assets: {len(all_assets):<5} | Strategies: {len(self.strategies):<4}      ║\n"
             f"╚═══════════════════════════════════════╝"
         )
+
+        # ✅ P0/#1 — STARTUP PRELOAD before any scan
+        if self.data_provider and self.use_multi_source:
+            logger.info("🚀 Starting startup preload...")
+            try:
+                count = await self.data_provider.preload_all_history(all_assets, batch_size=8)
+                logger.info(f"✅ Preload done: {count}/{len(all_assets)} symbols ready")
+            except Exception as e:
+                logger.error(f"❌ Preload failed: {e} — scans will be blocked until data is ready")
+        else:
+            logger.warning("⚠️ No data provider — scans will be blocked")
 
         if self.position_monitor:
             await self.position_monitor.start_monitoring()
@@ -679,44 +743,7 @@ class TradingEngine:
                 logger.error(f"❌ Main loop error: {e}")
                 await asyncio.sleep(300)
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # HELPERS
-    # ═══════════════════════════════════════════════════════════════════════
-
-    def _build_price_history(self, data: Dict, length: int) -> np.ndarray:
-        """
-        ✅ FIXED: Build price history from real data.
-        Uses the closes stored during fetch if available via _price_history_cache,
-        otherwise falls back to a conservative synthetic series based on real price/prev_close.
-        """
-        price      = data["price"]
-        prev_close = data.get("prev_close", price * 0.99)
-
-        # ✅ Use cached real price history if available
-        symbol = data.get("_symbol", None)
-        if symbol and symbol in self._price_history_cache:
-            cached = self._price_history_cache[symbol]
-            if len(cached) >= length:
-                return np.array(cached[-length:])
-            elif len(cached) >= 2:
-                # Pad front with synthetic if slightly short
-                needed = length - len(cached)
-                first_price = cached[0]
-                padding = [first_price * (1 + np.random.normal(0, 0.005)) for _ in range(needed)]
-                return np.array(padding + list(cached))
-
-        # Fallback: use only real anchor points (price and prev_close),
-        # fill history conservatively around prev_close with low noise
-        anchor_return = (price - prev_close) / prev_close if prev_close > 0 else 0.0
-        prices = [prev_close, price]
-
-        # Build backward from prev_close with very low noise (0.8% std vs old 1.5%)
-        # This is conservative — won't fake signals
-        returns = np.random.normal(0, 0.008, length - 2)
-        for ret in reversed(returns):
-            prices.insert(0, prices[0] / (1 + ret))
-
-        return np.array(prices)
+    # ─── Helpers ─────────────────────────────────────────────────────────
 
     def _load_positions(self) -> Dict:
         if os.path.exists(ACTIVE_POSITIONS_FILE):
@@ -725,11 +752,8 @@ class TradingEngine:
                     raw = json.load(f)
                 positions = {}
                 for sym, d in raw.items():
-                    p = Position(
-                        d["symbol"], d["entry_price"],
-                        d.get("strategy_type", "unknown"),
-                        d.get("signal_id")
-                    )
+                    p = Position(d["symbol"], d["entry_price"],
+                                 d.get("strategy_type","unknown"), d.get("signal_id"))
                     p.buy_signals_sent = d.get("buy_signals_sent", 1)
                     positions[sym] = p
                 return positions
@@ -742,11 +766,11 @@ class TradingEngine:
             data = {}
             for sym, pos in self.active_positions.items():
                 data[sym] = {
-                    "symbol": pos.symbol,
-                    "entry_price": pos.entry_price,
-                    "strategy_type": pos.strategy_type,
-                    "signal_id": pos.signal_id,
-                    "entry_time": pos.entry_time,
+                    "symbol":          pos.symbol,
+                    "entry_price":     pos.entry_price,
+                    "strategy_type":   pos.strategy_type,
+                    "signal_id":       pos.signal_id,
+                    "entry_time":      pos.entry_time,
                     "buy_signals_sent": pos.buy_signals_sent,
                 }
             with open(ACTIVE_POSITIONS_FILE, "w") as f:
@@ -757,18 +781,23 @@ class TradingEngine:
     def get_engine_status(self) -> str:
         exit_stats = self.exit_handler.get_exit_statistics()
         ai_stats   = self.ai_evaluator.get_stats() if self.ai_evaluator else {}
+        preload_st = self.data_provider.get_preload_status() if self.data_provider else {}
         return (
-            f"\n📊 ENGINE v7.1 STATUS\n"
+            f"\n📊 ENGINE v8.0 STATUS\n"
             f"Data: {'✅' if self.use_multi_source else '❌'} | "
             f"AI: {'✅' if self.ai_enabled else '❌'} | "
             f"Monitor: {'✅' if self.position_monitor else '❌'}\n\n"
+            f"Preload: {preload_st.get('loaded','?')}/{preload_st.get('complete','?')} | "
+            f"Vol: {preload_st.get('with_volume','?')} | 4H: {preload_st.get('with_4h','?')}\n\n"
             f"Signals: {self.stats['total_signals']} total | "
             f"Buy: {self.stats['buy_signals']} | Sell: {self.stats['sell_signals']}\n"
             f"AI: {self.stats['ai_approved']} approved / {self.stats['ai_rejected']} rejected\n"
-            f"Filtered: R:R={self.stats['rr_filtered']} | Daily={self.stats['daily_limited']}\n\n"
+            f"Filtered: R:R={self.stats['rr_filtered']} | Daily={self.stats['daily_limited']} | "
+            f"Vol={self.stats['volume_blocked']} | GlobalCD={self.stats['global_cooldown']}\n\n"
             f"{self.daily_tracker.status()}\n\n"
             f"Active positions: {len(self.active_positions)}\n"
-            f"Closed: {exit_stats.get('total_exits', 0)} | "
-            f"Win rate: {exit_stats.get('win_rate', 0):.1f}%\n"
-            f"AI approval rate: {ai_stats.get('approval_rate', 'N/A')}"
+            f"Closed: {exit_stats.get('total_exits',0)} | "
+            f"Win rate: {exit_stats.get('win_rate',0):.1f}%\n"
+            f"AI approval rate: {ai_stats.get('approval_rate','N/A')} | "
+            f"Outcomes in DB: {ai_stats.get('outcomes_in_db',0)}"
         )
