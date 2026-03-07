@@ -315,7 +315,8 @@ class SignalHistoryDB:
                     r.status,
                     r.profit_pct,
                     r.exit_reason,
-                    r.days_held
+                    r.days_held,
+                    r.notes
                 FROM sent_signals s
                 LEFT JOIN signal_results r ON s.id = r.signal_id
                 ORDER BY s.sent_time DESC

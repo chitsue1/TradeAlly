@@ -506,6 +506,44 @@ class TradingEngine:
                 except Exception:
                     pass
 
+            # ✅ FIX: Update signal_history_db — close signal as win/loss
+            # Without this, /results always shows HOLD for closed positions
+            if self.signal_history_db and symbol in self.active_positions:
+                pos = self.active_positions[symbol]
+                try:
+                    signal_id = getattr(pos, "signal_id", None)
+                    if signal_id is not None:
+                        status = (
+                            SignalStatus.CLOSED_WIN
+                            if exit_analysis.profit_pct > 0
+                            else SignalStatus.CLOSED_LOSS
+                        )
+                        now_iso = datetime.now().isoformat()
+                        self.signal_history_db.record_signal_result(SignalResult(
+                            signal_id=signal_id,
+                            symbol=symbol,
+                            actual_entry_price=pos.entry_price,
+                            entry_time=getattr(pos, "entry_time", now_iso) or now_iso,
+                            exit_price=exit_analysis.exit_price,
+                            exit_time=exit_analysis.exit_time or now_iso,
+                            exit_reason=exit_analysis.exit_reason.value,
+                            profit_pct=exit_analysis.profit_pct,
+                            profit_usd=exit_analysis.simulated_profit_usd,
+                            days_held=exit_analysis.hold_duration_hours / 24.0,
+                            status=status,
+                        ))
+                        # Also store max_profit so /results can display it
+                        self.signal_history_db.add_note(
+                            signal_id,
+                            f"max_profit_pct={exit_analysis.max_profit_pct_during_hold:.4f}"
+                        )
+                        logger.info(
+                            f"✅ signal_history_db closed: {symbol} "
+                            f"{exit_analysis.profit_pct:+.2f}% ({status.value})"
+                        )
+                except Exception as e:
+                    logger.warning(f"⚠️ signal_history_db sell update: {e}")
+
             self.stats["total_signals"] += 1
             self.stats["sell_signals"]  += 1
             logger.info(f"✅ SELL sent: {symbol}")

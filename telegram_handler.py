@@ -922,13 +922,13 @@ Analytics:
                 )
                 return
 
-            # Header
+            # ── სტატისტიკა ──────────────────────────────────────────────
             lines = ["📊 ბოლო 20 სიგნალი\n"]
 
-            closed = [s for s in recent if s.get("status") in ("win", "loss")]
-            pending = [s for s in recent if s.get("status") not in ("win", "loss")]
+            closed = [s for s in recent if s.get("status") in ("win", "loss", "timeout")]
+            pending = [s for s in recent if s.get("status") not in ("win", "loss", "timeout")]
 
-            wins = sum(1 for s in closed if s.get("status") == "win" or (s.get("profit_pct") or 0) > 0)
+            wins = sum(1 for s in closed if (s.get("profit_pct") or 0) > 0)
             total_closed = len(closed)
             win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
 
@@ -942,42 +942,56 @@ Analytics:
 
             for sig in recent:
                 symbol   = sig.get("symbol", "?")
-                strategy = sig.get("strategy", "?")
                 sent_at  = sig.get("sent_time", "")
                 profit   = sig.get("profit_pct")
                 status   = sig.get("status")
 
-                # Format time
+                # ── დრო ──────────────────────────────────────────────────
                 try:
                     dt = datetime.fromisoformat(sent_at)
                     time_str = dt.strftime("%d %b %H:%M")
                 except Exception:
                     time_str = sent_at[:16] if sent_at else "?"
 
-                # 100$ simulation
-                status_val = sig.get("status")
-                if profit is not None and status_val in ("win", "loss"):
+                # ── max_profit notes ──────────────────────────────────────
+                max_profit_str = ""
+                notes = sig.get("notes") or ""
+                if "max_profit_pct=" in notes:
+                    try:
+                        max_pct = float(notes.split("max_profit_pct=")[1].split()[0])
+                        if max_pct > 0.1:
+                            max_profit_str = f"   🔝 max: {max_pct:+.2f}%"
+                    except Exception:
+                        pass
+
+                # ── სტატუსი / სტრიქონი ────────────────────────────────────
+                is_closed = status in ("win", "loss", "timeout")
+
+                if is_closed and profit is not None:
+                    # ✅ CLOSED — ყოველთვის მწვანე/წითელი, არასდროს HOLD
                     sim_val  = 100 * (1 + profit / 100)
                     sim_diff = sim_val - 100
-                    sim_str  = f"${sim_val:.1f} ({sim_diff:+.1f}$)"
-                    result_emoji = "🟢" if profit > 0 else "🔴"
-                    profit_str = f"{profit:+.2f}%  {sim_str}"
+                    if profit > 0:
+                        result_emoji = "🟢"
+                        profit_str   = f"**{profit:+.2f}%**  ${sim_val:.1f} ({sim_diff:+.1f}$)"
+                    else:
+                        result_emoji = "🔴"
+                        profit_str   = f"{profit:+.2f}%  ${sim_val:.1f} ({sim_diff:+.1f}$)"
                 else:
+                    # 🟡 PENDING — ამ სიგნალს გაყიდვა ჯერ არ მიუღია
                     result_emoji = "🟡"
-                    profit_str   = "HOLD..."
+                    profit_str   = "ელოდება..."
 
                 lines.append(
                     f"{result_emoji} {symbol}  {time_str}\n"
-                    f"   {profit_str}"
+                    f"   {profit_str}{max_profit_str}"
                 )
 
             lines.append("\n━━━━━━━━━━━━━━━━━━━━")
-            lines.append("🟢 მოგება  🔴 ზარალი  🟡 HOLD")
+            lines.append("🟢 მოგება  🔴 ზარალი  🟡 ელოდება")
             lines.append("\n⚠️ წარსული შედეგი არ გარანტიას ძლევს")
 
             text = "\n".join(lines)
-
-            # Telegram 4096 char limit
             if len(text) > 4000:
                 text = text[:4000] + "\n... (truncated)"
 
