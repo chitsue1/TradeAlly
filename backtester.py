@@ -28,10 +28,20 @@ import numpy as np
 from config import get_tier, get_tier_risk, TIER_RISK
 from market_regime import MarketRegimeDetector
 from market_structure_builder import MarketStructureBuilder
-from strategies.long_term_strategy import LongTermStrategy
-from strategies.swing_strategy import SwingStrategy
-from strategies.scalping_strategy import ScalpingStrategy
-from strategies.opportunistic_strategy import OpportunisticStrategy
+
+# ✅ Lazy imports — circular import-ის თავიდან ასაცილებლად
+# (trading_engine → strategies → base_strategy loading order)
+def _load_strategies():
+    from strategies.long_term_strategy import LongTermStrategy
+    from strategies.swing_strategy import SwingStrategy
+    from strategies.scalping_strategy import ScalpingStrategy
+    from strategies.opportunistic_strategy import OpportunisticStrategy
+    return {
+        "long_term":     LongTermStrategy(),
+        "swing":         SwingStrategy(),
+        "scalping":      ScalpingStrategy(),
+        "opportunistic": OpportunisticStrategy(),
+    }
 
 logger = logging.getLogger(__name__)
 
@@ -137,12 +147,14 @@ class Backtester:
         self.data_provider = data_provider
         self.regime_detector   = MarketRegimeDetector()
         self.structure_builder = MarketStructureBuilder()
-        self.strategies = {
-            "long_term":     LongTermStrategy(),
-            "swing":         SwingStrategy(),
-            "scalping":      ScalpingStrategy(),
-            "opportunistic": OpportunisticStrategy(),
-        }
+        # Strategies loaded lazily on first use to avoid circular imports
+        self._strategies = None
+
+    @property
+    def strategies(self):
+        if self._strategies is None:
+            self._strategies = _load_strategies()
+        return self._strategies
 
     async def run_symbol(
         self,
