@@ -1,12 +1,14 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-TELEGRAM HANDLER v3.0 - SAFE MARKDOWN VERSION
+TELEGRAM HANDLER v4.0
 ═══════════════════════════════════════════════════════════════════════════════
 
-✅ Fixed:
-- All markdown parsing errors
-- Safe text formatting
-- No asterisks/backticks issues
+v4.0 Changes:
+✅ FIX #1 — Subscriptions: JSON → SQLite (Railway restart-safe)
+✅ FIX #3 — Scalping signals include "⚡ SHORT-TERM" warning + timing context
+✅ IMPROVE — Position sizing გათვლა ყოველ BUY სიგნალში (Risk-based)
+✅ IMPROVE — /results და /mystatus გაუმჯობესდა
+✅ IMPROVE — MAX_SIGNALS ლიმიტი ამოღებულია (AI filter საკმარისია)
 """
 
 import asyncio
@@ -15,6 +17,8 @@ import os
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+
+from subscription_db import SubscriptionDB
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -28,6 +32,12 @@ from exit_signals_handler import ExitSignalsHandler
 from position_monitor import PositionMonitor
 from sell_signal_message_generator import SellSignalMessageGenerator
 from signal_history_db import SignalHistoryDB, SentSignal, SignalResult, SignalStatus
+
+try:
+    from backtester import Backtester
+    BACKTESTER_AVAILABLE = True
+except Exception as _bt_err:
+    BACKTESTER_AVAILABLE = False
 
 try:
     from signal_memory import SignalMemory
@@ -126,10 +136,11 @@ class TelegramHandler:
         self.application = Application.builder().token(TELEGRAM_TOKEN).build()
         self.bot = self.application.bot
 
-        self.subscriptions_file = "subscriptions.json"
-        self.payment_requests_file = "payment_requests.json"
+        # ✅ FIX #1 — SQLite subscriptions (Railway restart-safe)
+        self.subscriptions = SubscriptionDB()
+        self.subscriptions.migrate_from_json("subscriptions.json")  # one-time migration
 
-        self.subscriptions = self._load_json(self.subscriptions_file)
+        self.payment_requests_file = "payment_requests.json"
         self.payment_requests = self._load_json(self.payment_requests_file)
         self.last_notifications = {}
 
@@ -158,14 +169,15 @@ class TelegramHandler:
     # FILE MANAGEMENT
     # ═══════════════════════════════════════════════════════════════════════
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # FILE MANAGEMENT (payment_requests only — subscriptions → SQLite)
+    # ═══════════════════════════════════════════════════════════════════════
+
     def _load_json(self, filename: str) -> Dict:
         try:
             if os.path.exists(filename):
-                with open(filename, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if filename == self.subscriptions_file:
-                        return {int(k): v for k, v in data.items()}
-                    return data
+                with open(filename, "r", encoding="utf-8") as f:
+                    return json.load(f)
             return {}
         except Exception as e:
             logger.error(f"Error loading {filename}: {e}")
@@ -173,60 +185,29 @@ class TelegramHandler:
 
     def _save_json(self, data: Dict, filename: str):
         try:
-            temp_data = data
-            if filename == self.subscriptions_file:
-                temp_data = {str(k): v for k, v in data.items()}
-
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(temp_data, f, indent=2, ensure_ascii=False)
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error saving {filename}: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SUBSCRIPTION MANAGEMENT
+    # SUBSCRIPTION MANAGEMENT  (delegates to SubscriptionDB)
     # ═══════════════════════════════════════════════════════════════════════
 
     def is_subscriber(self, user_id: int) -> bool:
-        if user_id not in self.subscriptions:
-            return False
+        return self.subscriptions.is_active(user_id)
 
-        expires_str = self.subscriptions[user_id].get('expires_at')
-        if not expires_str:
-            return False
-
-        try:
-            expires = datetime.strptime(expires_str, '%Y-%m-%d').date()
-            return datetime.now().date() <= expires
-        except:
-            return False
-
-    def add_subscription(self, user_id: int, days: int = 30) -> bool:
-        expires = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
-        self.subscriptions[user_id] = {
-            'expires_at': expires,
-            'activated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'plan': 'premium',
-            'days': days
-        }
-        self._save_json(self.subscriptions, self.subscriptions_file)
-        logger.info(f"User {user_id} subscribed for {days} days")
-        return True
+    def add_subscription(self, user_id: int, days: int = 30, username: str = None) -> bool:
+        return self.subscriptions.add_subscription(user_id, days, username)
 
     def remove_subscription(self, user_id: int) -> bool:
-        if user_id in self.subscriptions:
-            del self.subscriptions[user_id]
-            self._save_json(self.subscriptions, self.subscriptions_file)
-            logger.info(f"User {user_id} subscription removed")
-            return True
-        return False
+        return self.subscriptions.remove_subscription(user_id)
 
     def get_active_subscribers(self) -> List[int]:
-        return [uid for uid in self.subscriptions.keys() if self.is_subscriber(uid)]
+        return self.subscriptions.get_active_ids()
 
     def get_subscriber_info(self, user_id: int) -> Optional[Dict]:
-        if user_id in self.subscriptions:
-            return self.subscriptions[user_id]
-        return None
+        return self.subscriptions.get(user_id)
 
     # ═══════════════════════════════════════════════════════════════════════
     # USER COMMANDS
@@ -317,7 +298,8 @@ Stop-Loss — ზარალის ლიმიტი
                 f"გააქტიურდა: {activated}\n"
                 f"ვადა: {expires}\n"
                 f"დარჩა: {days_left} დღე\n\n"
-                f"სიგნალები: აქტიური ✅"
+                f"სიგნალები: აქტიური ✅\n\n"
+                f"⚠️ DYOR — ეს ფინანსური რჩევა არ არის."
             )
         else:
             status_msg = (
@@ -354,6 +336,7 @@ Signal History:
 /symbolstats [SYM] - Symbol stats
 /strategystats [STR] - Strategy stats
 /dashboard - Full dashboard
+/backtest [SYM] [DAYS] [STR] - Backtest strategy
 
 Position Monitoring:
 /openpositions - Active positions
@@ -417,7 +400,8 @@ Analytics:
             return
 
         active = self.get_active_subscribers()
-        inactive = [uid for uid in self.subscriptions.keys() if uid not in active]
+        all_ids = self.subscriptions.get_all_ids()
+        inactive = [uid for uid in all_ids if uid not in active]
 
         msg = (
             f"Users\n\n"
@@ -429,9 +413,10 @@ Analytics:
         if active:
             msg += "Active Users:\n"
             for uid in active[:15]:
-                info = self.subscriptions[uid]
-                expires = info['expires_at']
-                msg += f"{uid} - {expires}\n"
+                info = self.subscriptions.get(uid) or {}
+                expires = info.get('expires_at', '?')
+                days_left = self.subscriptions.days_left(uid)
+                msg += f"{uid} — {expires} ({days_left}d left)\n"
 
         await update.message.reply_text(msg)
 
@@ -441,11 +426,13 @@ Analytics:
 
         stats = getattr(self.trading_engine, 'stats', {})
 
+        sub_stats = self.subscriptions.stats()
         msg = (
             f"Bot Statistics\n\n"
             f"Users:\n"
-            f"Total: {len(self.subscriptions)}\n"
-            f"Active: {len(self.get_active_subscribers())}\n\n"
+            f"Total: {sub_stats['total']}\n"
+            f"Active: {sub_stats['active']}\n"
+            f"Expired: {sub_stats['expired']}\n\n"
             f"Signals:\n"
             f"Sent: {stats.get('total_signals', 0)}\n"
             f"AI Approved: {stats.get('ai_approved', 0)}\n"
@@ -1001,6 +988,64 @@ Analytics:
             logger.error(f"cmd_results error: {e}")
             await update.message.reply_text("⚠️ ისტორია დროებით მიუწვდომელია")
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # BACKTEST COMMAND
+    # ═══════════════════════════════════════════════════════════════════════
+
+    async def cmd_backtest(self, update, context):
+        """
+        /backtest [SYMBOL] [DAYS] [STRATEGY]
+        Ex: /backtest BTC/USD 90 swing
+        """
+        if update.effective_user.id != ADMIN_ID:
+            await update.message.reply_text("Unauthorized")
+            return
+
+        if not BACKTESTER_AVAILABLE:
+            await update.message.reply_text("Backtester module not available")
+            return
+
+        args = context.args or []
+        symbol   = args[0].upper() if len(args) > 0 else "BTC/USD"
+        days     = int(args[1]) if len(args) > 1 and args[1].isdigit() else 90
+        strategy = args[2].lower() if len(args) > 2 else "swing"
+
+        if strategy not in ("long_term", "swing", "scalping", "opportunistic", "all"):
+            await update.message.reply_text(
+                "სტრატეგია: long_term | swing | scalping | opportunistic | all"
+            )
+            return
+
+        await update.message.reply_text(
+            f"⏳ Backtest იწყება...\n{symbol} | {days}d | {strategy}"
+        )
+
+        try:
+            backtester = Backtester(
+                data_provider=getattr(self.trading_engine, "data_provider", None)
+            )
+
+            if strategy == "all":
+                results = await backtester.run_all_strategies(symbol, days)
+                lines = [f"📊 Backtest: {symbol} ({days}d)\n"]
+                for strat_name, result in results.items():
+                    if result.total > 0:
+                        lines.append(
+                            f"{strat_name.upper()}: {result.total} trades | "
+                            f"WR: {result.win_rate:.0f}% | "
+                            f"Avg: {result.avg_profit:+.1f}%"
+                        )
+                    else:
+                        lines.append(f"{strat_name.upper()}: სიგნალი ვერ მოიძებნა")
+                await update.message.reply_text("\n".join(lines))
+            else:
+                result = await backtester.run_symbol(symbol, days, strategy)
+                await update.message.reply_text(result.summary())
+
+        except Exception as e:
+            logger.error(f"Backtest error: {e}")
+            await update.message.reply_text(f"❌ Backtest error: {str(e)[:200]}")
+
     def _setup_handlers(self):
         # User commands
         self.application.add_handler(CommandHandler("start", self.cmd_start))
@@ -1037,6 +1082,7 @@ Analytics:
         self.application.add_handler(CommandHandler("symbolstats", self.cmd_symbolstats))
         self.application.add_handler(CommandHandler("strategystats", self.cmd_strategystats))
         self.application.add_handler(CommandHandler("dashboard", self.cmd_dashboard))
+        self.application.add_handler(CommandHandler("backtest", self.cmd_backtest))
 
         # Payment handling
         self.application.add_handler(MessageHandler(filters.PHOTO, self.handle_payment_photo))

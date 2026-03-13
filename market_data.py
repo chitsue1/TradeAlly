@@ -143,73 +143,205 @@ class MultiSourceDataProvider:
 
     def _init_symbol_mappings(self):
         self.yahoo_symbols = {
+            # ── 1. Core Majors ──────────────────────────────────────────────
             "BTC/USD":"BTC-USD","ETH/USD":"ETH-USD","BNB/USD":"BNB-USD",
             "SOL/USD":"SOL-USD","XRP/USD":"XRP-USD","ADA/USD":"ADA-USD",
-            "AVAX/USD":"AVAX-USD","LINK/USD":"LINK-USD","MATIC/USD":"MATIC-USD",
-            "DOT/USD":"DOT-USD","TRX/USD":"TRX-USD","LTC/USD":"LTC-USD",
-            "XLM/USD":"XLM-USD","ETC/USD":"ETC-USD",
-            "NEAR/USD":"NEAR-USD","ARB/USD":"ARB-USD","OP/USD":"OP-USD",
-            "SUI/USD":"SUI-USD","INJ/USD":"INJ-USD","APT/USD":"APT-USD",
-            "UNI/USD":"UNI-USD","ATOM/USD":"ATOM-USD","FTM/USD":"FTM-USD",
-            "KAS/USD":"KAS-USD","RUNE/USD":"RUNE-USD","EGLD/USD":"EGLD-USD",
-            "MINA/USD":"MINA-USD",
-            "DOGE/USD":"DOGE-USD","PEPE/USD":"PEPE-USD","WIF/USD":"WIF-USD",
-            "BONK/USD":"BONK-USD","FLOKI/USD":"FLOKI-USD","BRETT/USD":"BRETT-USD",
-            "POPCAT/USD":"POPCAT-USD","BOME/USD":"BOME-USD","MYRO/USD":"MYRO-USD",
-            "RNDR/USD":"RNDR-USD","FET/USD":"FET-USD","AGIX/USD":"AGIX-USD",
-            "GALA/USD":"GALA-USD","IMX/USD":"IMX-USD","ONDO/USD":"ONDO-USD",
-            "CFG/USD":"CFG-USD","AKT/USD":"AKT-USD","TAO/USD":"TAO-USD",
-            "PIXEL/USD":"PIXEL-USD",
-            "SEI/USD":"SEI-USD","TIA/USD":"TIA-USD","STRK/USD":"STRK-USD",
-            "BCH/USD":"BCH-USD","TON/USD":"TON-USD","PYTH/USD":"PYTH-USD",
-            "JTO/USD":"JTO-USD","DYM/USD":"DYM-USD","ZK/USD":"ZK-USD",
-            "AEVO/USD":"AEVO-USD",
+            "DOGE/USD":"DOGE-USD","TRX/USD":"TRX-USD","TON/USD":"TON11588-USD",
+            "AVAX/USD":"AVAX-USD",
+            # ── 2. Smart Contract L1s ───────────────────────────────────────
+            "DOT/USD":"DOT-USD","NEAR/USD":"NEAR-USD","ATOM/USD":"ATOM-USD",
+            "APT/USD":"APT-USD","SUI/USD":"SUI-USD","SEI/USD":"SEI-USD",
+            "TIA/USD":"TIA-USD","INJ/USD":"INJ-USD","EGLD/USD":"EGLD-USD",
+            "KAS/USD":"KAS-USD","FTM/USD":"FTM-USD","MINA/USD":"MINA-USD",
+            "ALGO/USD":"ALGO-USD","ICP/USD":"ICP-USD","HBAR/USD":"HBAR-USD",
+            "XTZ/USD":"XTZ-USD","FLOW/USD":"FLOW-USD","ROSE/USD":"ROSE-USD",
+            "CKB/USD":"CKB-USD","ONE/USD":"ONE-USD",
+            # ── 3. L2 / Rollup ──────────────────────────────────────────────
+            "ARB/USD":"ARB-USD","OP/USD":"OP-USD","MATIC/USD":"MATIC-USD",
+            "IMX/USD":"IMX-USD","STRK/USD":"STRK-USD","ZK/USD":"ZK-USD",
+            "METIS/USD":"METIS-USD","MANTA/USD":"MANTA-USD","BLAST/USD":"BLAST-USD",
+            "DYM/USD":"DYM-USD","AEVO/USD":"AEVO-USD","ZETA/USD":"ZETA-USD",
+            "SKL/USD":"SKL-USD","LRC/USD":"LRC-USD","CELR/USD":"CELR-USD",
+            # ── 4. Oracle / Infra ───────────────────────────────────────────
+            "LINK/USD":"LINK-USD","PYTH/USD":"PYTH-USD","BAND/USD":"BAND-USD",
+            "API3/USD":"API3-USD","AXL/USD":"AXL-USD","W/USD":"W-USD",
+            "SYN/USD":"SYN-USD","RUNE/USD":"RUNE-USD","ZRO/USD":"ZRO-USD",
+            "GRT/USD":"GRT-USD",
+            # ── 5. DeFi Leaders ─────────────────────────────────────────────
+            "UNI/USD":"UNI-USD","AAVE/USD":"AAVE-USD","MKR/USD":"MKR-USD",
+            "LDO/USD":"LDO-USD","SNX/USD":"SNX-USD","CRV/USD":"CRV-USD",
+            "COMP/USD":"COMP-USD","PENDLE/USD":"PENDLE-USD","MORPHO/USD":"MORPHO-USD",
+            "JUP/USD":"JUP-USD","JTO/USD":"JTO-USD","RAY/USD":"RAY-USD",
+            "DYDX/USD":"DYDX-USD","GMX/USD":"GMX-USD","1INCH/USD":"1INCH-USD",
+            # ── 6. RWA / Institutional ──────────────────────────────────────
+            "ONDO/USD":"ONDO-USD","CFG/USD":"CFG-USD","POLYX/USD":"POLYX-USD",
+            "XDC/USD":"XDC-USD","TRAC/USD":"TRAC-USD","MPL/USD":"MPL-USD",
+            "OM/USD":"OM-USD","RIO/USD":"RIO-USD","CHEX/USD":"CHEX-USD",
+            "LCX/USD":"LCX-USD",
+            # ── 7. AI / Compute ─────────────────────────────────────────────
+            "TAO/USD":"TAO-USD","RNDR/USD":"RNDR-USD","FET/USD":"FET-USD",
+            "AGIX/USD":"AGIX-USD","AKT/USD":"AKT-USD","OCEAN/USD":"OCEAN-USD",
+            "AIOZ/USD":"AIOZ-USD","NMR/USD":"NMR-USD","VIRTUAL/USD":"VIRTUAL-USD",
+            "PAAL/USD":"PAAL-USD",
+            # ── 8. DePIN / Storage ──────────────────────────────────────────
+            "FIL/USD":"FIL-USD","AR/USD":"AR-USD","HNT/USD":"HNT-USD",
+            "THETA/USD":"THETA-USD","IOTX/USD":"IOTX-USD","FLUX/USD":"FLUX-USD",
+            "RLC/USD":"RLC-USD","DIMO/USD":"DIMO-USD","MOBILE/USD":"MOBILE-USD",
+            "AERO/USD":"AERO-USD",
+            # ── 9. Gaming / Metaverse ───────────────────────────────────────
+            "GALA/USD":"GALA-USD","BEAM/USD":"BEAM-USD","PIXEL/USD":"PIXEL-USD",
+            "AXS/USD":"AXS-USD","SAND/USD":"SAND-USD","MANA/USD":"MANA-USD",
+            "RON/USD":"RON-USD","SUPER/USD":"SUPER-USD","ILV/USD":"ILV-USD",
+            "YGG/USD":"YGG-USD",
+            # ── 10. Payments / Legacy ───────────────────────────────────────
+            "LTC/USD":"LTC-USD","BCH/USD":"BCH-USD","XLM/USD":"XLM-USD",
+            "ETC/USD":"ETC-USD","DASH/USD":"DASH-USD","ZEC/USD":"ZEC-USD",
+            "BAT/USD":"BAT-USD","ENJ/USD":"ENJ-USD","ZIL/USD":"ZIL-USD",
+            "QTUM/USD":"QTUM-USD",
+            # ── 11. Exchange Tokens ─────────────────────────────────────────
+            "OKB/USD":"OKB-USD","CRO/USD":"CRO-USD","BGB/USD":"BGB-USD",
+            "KCS/USD":"KCS-USD","GT/USD":"GT-USD",
+            # ── 12. Meme / Mid-Caps ─────────────────────────────────────────
+            "PEPE/USD":"PEPE-USD","WIF/USD":"WIF-USD","BONK/USD":"BONK-USD",
+            "FLOKI/USD":"FLOKI-USD","BRETT/USD":"BRETT-USD","POPCAT/USD":"POPCAT-USD",
+            "BOME/USD":"BOME-USD","MYRO/USD":"MYRO-USD","SUSHI/USD":"SUSHI-USD",
+            "CVX/USD":"CVX-USD","KAVA/USD":"KAVA-USD","OSMO/USD":"OSMO-USD",
+            "STX/USD":"STX-USD","ORDI/USD":"ORDI-USD","SATS/USD":"SATS-USD",
         }
         self.coingecko_ids = {
+            # ── 1. Core Majors ──────────────────────────────────────────────
             "BTC/USD":"bitcoin","ETH/USD":"ethereum","BNB/USD":"binancecoin",
             "SOL/USD":"solana","XRP/USD":"ripple","ADA/USD":"cardano",
-            "AVAX/USD":"avalanche-2","LINK/USD":"chainlink","MATIC/USD":"matic-network",
-            "DOT/USD":"polkadot","TRX/USD":"tron","LTC/USD":"litecoin",
-            "XLM/USD":"stellar","ETC/USD":"ethereum-classic",
-            "NEAR/USD":"near","ARB/USD":"arbitrum","OP/USD":"optimism",
-            "SUI/USD":"sui","INJ/USD":"injective-protocol","APT/USD":"aptos",
-            "UNI/USD":"uniswap","ATOM/USD":"cosmos","FTM/USD":"fantom",
-            "KAS/USD":"kaspa","RUNE/USD":"thorchain","EGLD/USD":"elrond-erd-2",
-            "MINA/USD":"mina-protocol",
-            "DOGE/USD":"dogecoin","PEPE/USD":"pepe","WIF/USD":"dogwifcoin",
-            "BONK/USD":"bonk","FLOKI/USD":"floki","BRETT/USD":"brett",
-            "POPCAT/USD":"popcat","BOME/USD":"book-of-meme","MYRO/USD":"myro",
-            "RNDR/USD":"render-token","FET/USD":"fetch-ai","AGIX/USD":"singularitynet",
-            "GALA/USD":"gala","IMX/USD":"immutable-x","ONDO/USD":"ondo-finance",
-            "CFG/USD":"centrifuge","AKT/USD":"akash-network","TAO/USD":"bittensor",
-            "PIXEL/USD":"pixels",
-            "SEI/USD":"sei-network","TIA/USD":"celestia","STRK/USD":"starknet",
-            "BCH/USD":"bitcoin-cash","TON/USD":"the-open-network","PYTH/USD":"pyth-network",
-            "JTO/USD":"jito-governance-token","DYM/USD":"dymension","ZK/USD":"zksync",
-            "AEVO/USD":"aevo",
+            "DOGE/USD":"dogecoin","TRX/USD":"tron","TON/USD":"the-open-network",
+            "AVAX/USD":"avalanche-2",
+            # ── 2. Smart Contract L1s ───────────────────────────────────────
+            "DOT/USD":"polkadot","NEAR/USD":"near","ATOM/USD":"cosmos",
+            "APT/USD":"aptos","SUI/USD":"sui","SEI/USD":"sei-network",
+            "TIA/USD":"celestia","INJ/USD":"injective-protocol","EGLD/USD":"elrond-erd-2",
+            "KAS/USD":"kaspa","FTM/USD":"fantom","MINA/USD":"mina-protocol",
+            "ALGO/USD":"algorand","ICP/USD":"internet-computer","HBAR/USD":"hedera-hashgraph",
+            "XTZ/USD":"tezos","FLOW/USD":"flow","ROSE/USD":"oasis-network",
+            "CKB/USD":"nervos-network","ONE/USD":"harmony",
+            # ── 3. L2 / Rollup ──────────────────────────────────────────────
+            "ARB/USD":"arbitrum","OP/USD":"optimism","MATIC/USD":"matic-network",
+            "IMX/USD":"immutable-x","STRK/USD":"starknet","ZK/USD":"zksync",
+            "METIS/USD":"metis-token","MANTA/USD":"manta-network","BLAST/USD":"blast",
+            "DYM/USD":"dymension","AEVO/USD":"aevo-exchange","ZETA/USD":"zetachain",
+            "SKL/USD":"skale","LRC/USD":"loopring","CELR/USD":"celer-network",
+            # ── 4. Oracle / Infra ───────────────────────────────────────────
+            "LINK/USD":"chainlink","PYTH/USD":"pyth-network","BAND/USD":"band-protocol",
+            "API3/USD":"api3","AXL/USD":"axelar","W/USD":"wormhole",
+            "SYN/USD":"synapse-2","RUNE/USD":"thorchain","ZRO/USD":"layerzero",
+            "GRT/USD":"the-graph",
+            # ── 5. DeFi Leaders ─────────────────────────────────────────────
+            "UNI/USD":"uniswap","AAVE/USD":"aave","MKR/USD":"maker",
+            "LDO/USD":"lido-dao","SNX/USD":"havven","CRV/USD":"curve-dao-token",
+            "COMP/USD":"compound-governance-token","PENDLE/USD":"pendle",
+            "MORPHO/USD":"morpho","JUP/USD":"jupiter-exchange-solana",
+            "JTO/USD":"jito-governance-token","RAY/USD":"raydium",
+            "DYDX/USD":"dydx-chain","GMX/USD":"gmx","1INCH/USD":"1inch",
+            # ── 6. RWA / Institutional ──────────────────────────────────────
+            "ONDO/USD":"ondo-finance","CFG/USD":"centrifuge",
+            "POLYX/USD":"polymesh-network","XDC/USD":"xdce-crowd-sale",
+            "TRAC/USD":"origintrail","MPL/USD":"maple","OM/USD":"mantra-dao",
+            "RIO/USD":"realio-network","CHEX/USD":"chex-token","LCX/USD":"lcx",
+            # ── 7. AI / Compute ─────────────────────────────────────────────
+            "TAO/USD":"bittensor","RNDR/USD":"render-token","FET/USD":"fetch-ai",
+            "AGIX/USD":"singularitynet","AKT/USD":"akash-network",
+            "OCEAN/USD":"ocean-protocol","AIOZ/USD":"aioz-network",
+            "NMR/USD":"numeraire","VIRTUAL/USD":"virtual-protocol","PAAL/USD":"paal-ai",
+            # ── 8. DePIN / Storage ──────────────────────────────────────────
+            "FIL/USD":"filecoin","AR/USD":"arweave","HNT/USD":"helium",
+            "THETA/USD":"theta-token","IOTX/USD":"iotex","FLUX/USD":"zelcash",
+            "RLC/USD":"iexec-rlc","DIMO/USD":"dimo","MOBILE/USD":"helium-mobile",
+            "AERO/USD":"aerodrome-finance",
+            # ── 9. Gaming / Metaverse ───────────────────────────────────────
+            "GALA/USD":"gala","BEAM/USD":"beam-2","PIXEL/USD":"pixels",
+            "AXS/USD":"axie-infinity","SAND/USD":"the-sandbox",
+            "MANA/USD":"decentraland","RON/USD":"ronin","SUPER/USD":"superfarm",
+            "ILV/USD":"illuvium","YGG/USD":"yield-guild-games",
+            # ── 10. Payments / Legacy ───────────────────────────────────────
+            "LTC/USD":"litecoin","BCH/USD":"bitcoin-cash","XLM/USD":"stellar",
+            "ETC/USD":"ethereum-classic","DASH/USD":"dash","ZEC/USD":"zcash",
+            "BAT/USD":"basic-attention-token","ENJ/USD":"enjincoin",
+            "ZIL/USD":"zilliqa","QTUM/USD":"qtum",
+            # ── 11. Exchange Tokens ─────────────────────────────────────────
+            "OKB/USD":"okb","CRO/USD":"crypto-com-chain","BGB/USD":"bitget-token",
+            "KCS/USD":"kucoin-shares","GT/USD":"gatechain-token",
+            # ── 12. Meme / Mid-Caps ─────────────────────────────────────────
+            "PEPE/USD":"pepe","WIF/USD":"dogwifcoin","BONK/USD":"bonk",
+            "FLOKI/USD":"floki","BRETT/USD":"brett","POPCAT/USD":"popcat",
+            "BOME/USD":"book-of-meme","MYRO/USD":"myro","SUSHI/USD":"sushi",
+            "CVX/USD":"convex-finance","KAVA/USD":"kava","OSMO/USD":"osmosis",
+            "STX/USD":"blockstack","ORDI/USD":"ordinals",
+            "SATS/USD":"1000sats-ordinals",
         }
         self.binance_symbols = {
+            # ── 1. Core Majors ──────────────────────────────────────────────
             "BTC/USD":"BTCUSDT","ETH/USD":"ETHUSDT","BNB/USD":"BNBUSDT",
             "SOL/USD":"SOLUSDT","XRP/USD":"XRPUSDT","ADA/USD":"ADAUSDT",
-            "AVAX/USD":"AVAXUSDT","LINK/USD":"LINKUSDT","MATIC/USD":"MATICUSDT",
-            "DOT/USD":"DOTUSDT","TRX/USD":"TRXUSDT","LTC/USD":"LTCUSDT",
-            "XLM/USD":"XLMUSDT","ETC/USD":"ETCUSDT",
-            "NEAR/USD":"NEARUSDT","ARB/USD":"ARBUSDT","OP/USD":"OPUSDT",
-            "SUI/USD":"SUIUSDT","INJ/USD":"INJUSDT","APT/USD":"APTUSDT",
-            "UNI/USD":"UNIUSDT","ATOM/USD":"ATOMUSDT","FTM/USD":"FTMUSDT",
-            "KAS/USD":"KASUSDT","RUNE/USD":"RUNEUSDT","EGLD/USD":"EGLDUSDT",
-            "MINA/USD":"MINAUSDT",
-            "DOGE/USD":"DOGEUSDT","PEPE/USD":"PEPEUSDT","WIF/USD":"WIFUSDT",
-            "BONK/USD":"BONKUSDT","FLOKI/USD":"FLOKIUSDT","BRETT/USD":"BRETTUSDT",
-            "POPCAT/USD":"POPCATUSDT","BOME/USD":"BOMEUSDT","MYRO/USD":"MYROUSDT",
-            "RNDR/USD":"RNDRUSDT","FET/USD":"FETUSDT","AGIX/USD":"AGIXUSDT",
-            "GALA/USD":"GALAUSDT","IMX/USD":"IMXUSDT","ONDO/USD":"ONDOUSDT",
-            "CFG/USD":"CFGUSDT","AKT/USD":"AKTUSDT","TAO/USD":"TAOUSDT",
-            "PIXEL/USD":"PIXELUSDT",
-            "SEI/USD":"SEIUSDT","TIA/USD":"TIAUSDT","STRK/USD":"STRKUSDT",
-            "BCH/USD":"BCHUSDT","TON/USD":"TONUSDT","PYTH/USD":"PYTHUSDT",
-            "JTO/USD":"JTOUSDT","DYM/USD":"DYMUSDT","ZK/USD":"ZKUSDT",
-            "AEVO/USD":"AEVOUSDT",
+            "DOGE/USD":"DOGEUSDT","TRX/USD":"TRXUSDT","TON/USD":"TONUSDT",
+            "AVAX/USD":"AVAXUSDT",
+            # ── 2. Smart Contract L1s ───────────────────────────────────────
+            "DOT/USD":"DOTUSDT","NEAR/USD":"NEARUSDT","ATOM/USD":"ATOMUSDT",
+            "APT/USD":"APTUSDT","SUI/USD":"SUIUSDT","SEI/USD":"SEIUSDT",
+            "TIA/USD":"TIAUSDT","INJ/USD":"INJUSDT","EGLD/USD":"EGLDUSDT",
+            "KAS/USD":"KASUSDT","FTM/USD":"FTMUSDT","MINA/USD":"MINAUSDT",
+            "ALGO/USD":"ALGOUSDT","ICP/USD":"ICPUSDT","HBAR/USD":"HBARUSDT",
+            "XTZ/USD":"XTZUSDT","FLOW/USD":"FLOWUSDT","ROSE/USD":"ROSEUSDT",
+            "CKB/USD":"CKBUSDT","ONE/USD":"ONEUSDT",
+            # ── 3. L2 / Rollup ──────────────────────────────────────────────
+            "ARB/USD":"ARBUSDT","OP/USD":"OPUSDT","MATIC/USD":"MATICUSDT",
+            "IMX/USD":"IMXUSDT","STRK/USD":"STRKUSDT","ZK/USD":"ZKUSDT",
+            "METIS/USD":"METISUSDT","MANTA/USD":"MANTAUSDT","BLAST/USD":"BLASTUSDT",
+            "DYM/USD":"DYMUSDT","AEVO/USD":"AEVOUSDT","ZETA/USD":"ZETAUSDT",
+            "SKL/USD":"SKLUSDT","LRC/USD":"LRCUSDT","CELR/USD":"CELRUSDT",
+            # ── 4. Oracle / Infra ───────────────────────────────────────────
+            "LINK/USD":"LINKUSDT","PYTH/USD":"PYTHUSDT","BAND/USD":"BANDUSDT",
+            "API3/USD":"API3USDT","AXL/USD":"AXLUSDT","W/USD":"WUSDT",
+            "SYN/USD":"SYNUSDT","RUNE/USD":"RUNEUSDT","ZRO/USD":"ZROUSDT",
+            "GRT/USD":"GRTUSDT",
+            # ── 5. DeFi Leaders ─────────────────────────────────────────────
+            "UNI/USD":"UNIUSDT","AAVE/USD":"AAVEUSDT","MKR/USD":"MKRUSDT",
+            "LDO/USD":"LDOUSDT","SNX/USD":"SNXUSDT","CRV/USD":"CRVUSDT",
+            "COMP/USD":"COMPUSDT","PENDLE/USD":"PENDLEUSDT","MORPHO/USD":"MORPHOUSDT",
+            "JUP/USD":"JUPUSDT","JTO/USD":"JTOUSDT","RAY/USD":"RAYUSDT",
+            "DYDX/USD":"DYDXUSDT","GMX/USD":"GMXUSDT","1INCH/USD":"1INCHUSDT",
+            # ── 6. RWA / Institutional ──────────────────────────────────────
+            "ONDO/USD":"ONDOUSDT","CFG/USD":"CFGUSDT","POLYX/USD":"POLYXUSDT",
+            "XDC/USD":"XDCUSDT","TRAC/USD":"TRACUSDT","MPL/USD":"MPLUSDT",
+            "OM/USD":"OMUSDT","RIO/USD":"RIOUSDT",
+            # CHEX, LCX — Binance-ზე არ ვაჭრობენ → Yahoo/CoinGecko only
+            # ── 7. AI / Compute ─────────────────────────────────────────────
+            "TAO/USD":"TAOUSDT","RNDR/USD":"RNDRUSDT","FET/USD":"FETUSDT",
+            "AGIX/USD":"AGIXUSDT","AKT/USD":"AKTUSDT","OCEAN/USD":"OCEANUSDT",
+            "AIOZ/USD":"AIOZUSDT","NMR/USD":"NMRUSDT","VIRTUAL/USD":"VIRTUALUSDT",
+            # PAAL — Binance-ზე არ ვაჭრობს → Yahoo/CoinGecko only
+            # ── 8. DePIN / Storage ──────────────────────────────────────────
+            "FIL/USD":"FILUSDT","AR/USD":"ARUSDT","HNT/USD":"HNTUSDT",
+            "THETA/USD":"THETAUSDT","IOTX/USD":"IOTXUSDT","FLUX/USD":"FLUXUSDT",
+            "RLC/USD":"RLCUSDT",
+            # DIMO, MOBILE, AERO — Binance-ზე არ ვაჭრობენ → Yahoo/CoinGecko only
+            # ── 9. Gaming / Metaverse ───────────────────────────────────────
+            "GALA/USD":"GALAUSDT","BEAM/USD":"BEAMUSDT","PIXEL/USD":"PIXELUSDT",
+            "AXS/USD":"AXSUSDT","SAND/USD":"SANDUSDT","MANA/USD":"MANAUSDT",
+            "RON/USD":"RONUSDT","SUPER/USD":"SUPERUSDT","ILV/USD":"ILVUSDT",
+            "YGG/USD":"YGGUSDT",
+            # ── 10. Payments / Legacy ───────────────────────────────────────
+            "LTC/USD":"LTCUSDT","BCH/USD":"BCHUSDT","XLM/USD":"XLMUSDT",
+            "ETC/USD":"ETCUSDT","DASH/USD":"DASHUSDT","ZEC/USD":"ZECUSDT",
+            "BAT/USD":"BATUSDT","ENJ/USD":"ENJUSDT","ZIL/USD":"ZILUSDT",
+            "QTUM/USD":"QTUMUSDT",
+            # ── 11. Exchange Tokens ─────────────────────────────────────────
+            "CRO/USD":"CROUSDT",
+            # OKB, BGB, KCS, GT — Binance-ზე არ ვაჭრობენ → Yahoo/CoinGecko only
+            # ── 12. Meme / Mid-Caps ─────────────────────────────────────────
+            "PEPE/USD":"PEPEUSDT","WIF/USD":"WIFUSDT","BONK/USD":"BONKUSDT",
+            "FLOKI/USD":"FLOKIUSDT","POPCAT/USD":"POPCATUSDT",
+            "BOME/USD":"BOMEUSDT","MYRO/USD":"MYROUSDT","SUSHI/USD":"SUSHIUSDT",
+            "CVX/USD":"CVXUSDT","KAVA/USD":"KAVAUSDT","OSMO/USD":"OSMOUSDT",
+            "STX/USD":"STXUSDT","ORDI/USD":"ORDIUSDT","SATS/USD":"1000SATSUSDT",
+            # BRETT — Base chain token, Binance-ზე არ ვაჭრობს → Yahoo/CoinGecko only
         }
 
     # ─── Circuit Breakers ─────────────────────────────────────────────────

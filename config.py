@@ -1,6 +1,6 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-TRADE ALLY BOT - CONFIG v3.0 PRODUCTION
+TRADE ALLY BOT - CONFIG v4.0 PRODUCTION
 ═══════════════════════════════════════════════════════════════════════════════
 
 ✅ გაუმჯობესებები:
@@ -38,40 +38,66 @@ ALPACA_API_KEY      = os.environ.get("ALPACA_API_KEY", None)
 ALPACA_SECRET_KEY   = os.environ.get("ALPACA_SECRET_KEY", None)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ASSET UNIVERSE — 57 კრიპტო, 5 Tier
+# ASSET UNIVERSE — 140 კრიპტო, 5 Tier (v9.0 სრული სია)
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Tier 1 — Core Majors / Blue Chips (ყველაზე დიდი cap, ყველაზე დაბალი რისკი)
 TIER_1_BLUE_CHIPS = [
-    "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD",
-    "XRP/USD", "ADA/USD", "AVAX/USD", "LINK/USD",
-    "MATIC/USD", "DOT/USD", "TRX/USD", "LTC/USD",
-    "XLM/USD", "ETC/USD"
+    "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD",
+    "ADA/USD", "DOGE/USD", "TRX/USD", "TON/USD", "AVAX/USD",
 ]
 
+# Tier 2 — High Growth: L1s + L2s + DeFi + Infra (საშუალო-მაღალი პოტენციალი)
 TIER_2_HIGH_GROWTH = [
-    "NEAR/USD", "ARB/USD", "OP/USD", "SUI/USD",
-    "INJ/USD", "APT/USD", "UNI/USD", "ATOM/USD",
-    "FTM/USD", "KAS/USD", "RUNE/USD", "EGLD/USD",
-    "MINA/USD"
+    # Smart Contract L1s
+    "DOT/USD", "NEAR/USD", "ATOM/USD", "APT/USD", "SUI/USD",
+    "SEI/USD", "TIA/USD", "INJ/USD", "EGLD/USD", "KAS/USD",
+    "FTM/USD", "MINA/USD", "ALGO/USD", "ICP/USD", "HBAR/USD",
+    "XTZ/USD", "FLOW/USD", "ROSE/USD", "CKB/USD", "ONE/USD",
+    # L2 / Rollup Ecosystem
+    "ARB/USD", "OP/USD", "MATIC/USD", "IMX/USD", "STRK/USD",
+    "ZK/USD", "METIS/USD", "MANTA/USD", "BLAST/USD", "DYM/USD",
+    "AEVO/USD", "ZETA/USD", "SKL/USD", "LRC/USD", "CELR/USD",
+    # Oracle / Interop / Infra
+    "LINK/USD", "PYTH/USD", "BAND/USD", "API3/USD", "AXL/USD",
+    "W/USD", "SYN/USD", "RUNE/USD", "ZRO/USD", "GRT/USD",
+    # DeFi Leaders
+    "UNI/USD", "AAVE/USD", "MKR/USD", "LDO/USD", "SNX/USD",
+    "CRV/USD", "COMP/USD", "PENDLE/USD", "MORPHO/USD", "JUP/USD",
+    "JTO/USD", "RAY/USD", "DYDX/USD", "GMX/USD", "1INCH/USD",
+    # RWA / Institutional
+    "ONDO/USD", "CFG/USD", "POLYX/USD", "XDC/USD", "TRAC/USD",
+    "MPL/USD", "OM/USD", "RIO/USD", "CHEX/USD", "LCX/USD",
+    # AI / Compute / Agents
+    "TAO/USD", "RNDR/USD", "FET/USD", "AGIX/USD", "AKT/USD",
+    "OCEAN/USD", "AIOZ/USD", "NMR/USD", "VIRTUAL/USD", "PAAL/USD",
+    # DePIN / Storage
+    "FIL/USD", "AR/USD", "HNT/USD", "THETA/USD", "IOTX/USD",
+    "FLUX/USD", "RLC/USD", "DIMO/USD", "MOBILE/USD", "AERO/USD",
+    # Gaming / Metaverse
+    "GALA/USD", "BEAM/USD", "PIXEL/USD", "AXS/USD", "SAND/USD",
+    "MANA/USD", "RON/USD", "SUPER/USD", "ILV/USD", "YGG/USD",
+    # Payments / Legacy
+    "LTC/USD", "BCH/USD", "XLM/USD", "ETC/USD", "DASH/USD",
+    "ZEC/USD", "BAT/USD", "ENJ/USD", "ZIL/USD", "QTUM/USD",
+    # Exchange Tokens
+    "OKB/USD", "CRO/USD", "BGB/USD", "KCS/USD", "GT/USD",
 ]
 
+# Tier 3 — Meme Coins (მაღალი ვოლატილობა, სწრაფი მოძრაობები)
 TIER_3_MEME_COINS = [
-    "DOGE/USD", "PEPE/USD", "WIF/USD", "BONK/USD",
-    "FLOKI/USD", "BRETT/USD", "POPCAT/USD", "BOME/USD",
-    "MYRO/USD"
+    "PEPE/USD", "WIF/USD", "BONK/USD", "FLOKI/USD",
+    "BRETT/USD", "POPCAT/USD", "BOME/USD", "MYRO/USD",
 ]
 
+# Tier 4 — Narrative / Sector Mid-Caps (DeFi infra, cross-chain)
 TIER_4_NARRATIVE = [
-    "RNDR/USD", "FET/USD", "AGIX/USD", "GALA/USD",
-    "IMX/USD", "ONDO/USD", "CFG/USD", "AKT/USD",
-    "TAO/USD", "PIXEL/USD"
+    "SUSHI/USD", "CVX/USD", "KAVA/USD", "OSMO/USD",
+    "STX/USD", "ORDI/USD", "SATS/USD",
 ]
 
-TIER_5_EMERGING = [
-    "SEI/USD", "TIA/USD", "STRK/USD", "BCH/USD",
-    "TON/USD", "PYTH/USD", "JTO/USD", "DYM/USD",
-    "ZK/USD", "AEVO/USD"
-]
+# Tier 5 — Emerging (ახალი პროექტები, ყველაზე მაღალი რისკი/reward)
+TIER_5_EMERGING = []
 
 CRYPTO      = TIER_1_BLUE_CHIPS + TIER_2_HIGH_GROWTH + TIER_3_MEME_COINS + TIER_4_NARRATIVE + TIER_5_EMERGING
 STOCKS      = []
@@ -81,9 +107,9 @@ COMMODITIES = []
 # SCAN SETTINGS
 # ═══════════════════════════════════════════════════════════════════════════
 
-SCAN_INTERVAL         = 900     # 15 წუთი
+SCAN_INTERVAL         = 300     # ✅ FIX #scalping — 5 წუთი (scalping-ს სჭირდება სწრაფი სკანირება)
 ASSET_DELAY           = 1.5     # წამი assets შორის
-NOTIFICATION_COOLDOWN = 1800    # 30 წუთი cooldown per symbol
+NOTIFICATION_COOLDOWN = 1800    # 30 წუთი cooldown per symbol (scalping-ისთვის 6h override-ია სტრატეგიაში)
 MAX_HOLD_HOURS        = 240     # 10 დღე default max hold
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -104,13 +130,14 @@ MIN_CONFIDENCE_FOR_AI     = 58   # strategy confidence >= ამ score-ამდ
 # SIGNAL QUALITY GATES
 # ═══════════════════════════════════════════════════════════════════════════
 
-MAX_SIGNALS_PER_DAY           = 5    # სულ დღეში
+# ✅ v9.0 — AI filter is the real gate; artificial daily caps removed
+MAX_SIGNALS_PER_DAY           = 9999
 MAX_SIGNALS_PER_TIER_DAY = {
-    "BLUE_CHIP":   2,
-    "HIGH_GROWTH": 2,
-    "MEME":        1,
-    "NARRATIVE":   1,
-    "EMERGING":    1,
+    "BLUE_CHIP":   9999,
+    "HIGH_GROWTH": 9999,
+    "MEME":        9999,
+    "NARRATIVE":   9999,
+    "EMERGING":    9999,
 }
 
 MIN_RR_RATIO                  = 1.5  # minimum Risk:Reward

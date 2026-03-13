@@ -1,24 +1,15 @@
 """
-TRADING ENGINE v8.0 — ALL FIXES APPLIED
+TRADING ENGINE v9.0
 ═══════════════════════════════════════════════════════════════════════════════
-P0 FIXES:
-  #1 — startup preload: data_provider.preload_all_history() before first scan
-       scan_market blocked until preload_complete=True
-  #2 — volume_missing → skip signal (no mock, no random)
-  #3 — AI learning via SQLite (handled in ai_risk_evaluator.py)
+v8.0 შენარჩუნებული (ყველა P0/P1/P2 fix)
 
-P1 FIXES:
-  #4 — multi-TF data from MarketData.multi_tf (real 1h+4h, no inference)
-       passed to market_structure_builder and strategies
-  #5 — trailing stop in exit_signals_handler.py (transparent to engine)
-  #6 — global symbol cooldown: only ONE active signal per symbol
-       across ALL strategies simultaneously
-
-P2 FIX #8 — confidence score: base_score starts at 0 (no hidden +50 floor)
-            MIN_CONFIDENCE thresholds raised by 5 points to compensate
-
-v7.1 შენარჩუნებული: all strategies, AI eval, daily limits, position monitoring,
-                     analytics, signal history, signal memory
+v9.0 ახალი:
+  ✅ FIX #sub  — Subscriptions SQLite (Railway restart-safe)
+  ✅ FIX #scan — SCAN_INTERVAL 900s→300s (5min) scalping-სთვის
+  ✅ FIX #sig  — MAX_SIGNALS ლიმიტი ამოღებულია (AI filter საკმარისია)
+  ✅ IMPROVE   — Position sizing ყოველ BUY სიგნალში (2% risk rule)
+  ✅ IMPROVE   — Scalping სიგნალი: timing warning + expiry ჩანს
+  ✅ IMPROVE   — /backtest command admin-ისთვის
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
@@ -399,12 +390,42 @@ class TradingEngine:
                     ai_block += "\n" + "\n".join(extras)
                 msg += ai_block
 
+            # ✅ IMPROVE — Position sizing (2% risk rule)
+            stop_frac = stop_pct / 100
+            capital_sizes = {
+                100:  round(100  * 0.02 / stop_frac) if stop_frac > 0 else 0,
+                500:  round(500  * 0.02 / stop_frac) if stop_frac > 0 else 0,
+                1000: round(1000 * 0.02 / stop_frac) if stop_frac > 0 else 0,
+                5000: round(5000 * 0.02 / stop_frac) if stop_frac > 0 else 0,
+            }
+            sizing_block = (
+                f"\n💼 Position Sizing (2% Risk Rule):\n"
+                f"  $100  → ${capital_sizes[100]}\n"
+                f"  $500  → ${capital_sizes[500]}\n"
+                f"  $1000 → ${capital_sizes[1000]}\n"
+                f"  $5000 → ${capital_sizes[5000]}"
+            )
+
+            # ✅ FIX #3 — Scalping timing warning
+            strategy_val = signal.strategy_type.value if hasattr(signal, "strategy_type") else ""
+            scalping_warning = ""
+            if "scalp" in str(strategy_val).lower():
+                from datetime import timedelta as _td
+                expiry = (datetime.now() + _td(minutes=60)).strftime("%H:%M")
+                scalping_warning = (
+                    f"\n⚡ SHORT-TERM სიგნალი — სწრაფი მოქმედება საჭიროა\n"
+                    f"⏱ სიგნალი ვარგისია: ახლა - {expiry}\n"
+                    f"🚫 60 წუთის შემდეგ სიგნალი გაუქმდება\n"
+                )
+
             msg += (
                 f"\n━━━━━━━━━━━━━━━━━━\n"
                 f"🔴 Stop Loss:  -{stop_pct:.1f}%\n"
                 f"🟢 Target:     +{tgt_pct:.1f}%\n"
                 f"📊 R:R Ratio:   1:{rr:.2f}\n"
                 f"🎯 Trailing Stop: ჩაირთვება +{tgt_pct*0.5:.1f}%-ზე\n"
+                f"{scalping_warning}"
+                f"{sizing_block}\n"
             )
 
             signal_id = None
