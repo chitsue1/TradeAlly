@@ -133,8 +133,8 @@ class TelegramHandler:
         logger.info("Telegram Handler v3.0 initializing...")
 
         self.trading_engine = trading_engine
-        self.application = Application.builder().token(TELEGRAM_TOKEN).build()
-        self.bot = self.application.bot
+        self.application = None  # lazy init in start() — fixes ptb async conflict
+        self.bot = None
 
         # ✅ FIX #1 — SQLite subscriptions (Railway restart-safe)
         self.subscriptions = SubscriptionDB()
@@ -162,7 +162,7 @@ class TelegramHandler:
         self._is_running = False
         self._start_lock = asyncio.Lock()
 
-        self._setup_handlers()
+        # handlers registered in start() after application is built
         logger.info("Telegram Handler v3.0 ready")
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -1099,6 +1099,9 @@ Analytics:
                 return
 
             try:
+                self.application = Application.builder().token(TELEGRAM_TOKEN).build()
+                self.bot = self.application.bot
+                self._setup_handlers()
                 await self.application.initialize()
                 await self.application.start()
                 await self.application.updater.start_polling(drop_pending_updates=True)
