@@ -133,7 +133,7 @@ class TelegramHandler:
         logger.info("Telegram Handler v3.0 initializing...")
 
         self.trading_engine = trading_engine
-        self.application = None  # lazy init in start() — fixes ptb async conflict
+        self.application = None  # lazy init in start() — fixes Python 3.13 + ptb conflict
         self.bot = None
 
         # ✅ FIX #1 — SQLite subscriptions (Railway restart-safe)
@@ -162,7 +162,6 @@ class TelegramHandler:
         self._is_running = False
         self._start_lock = asyncio.Lock()
 
-        # handlers registered in start() after application is built
         logger.info("Telegram Handler v3.0 ready")
 
     # ═══════════════════════════════════════════════════════════════════════
