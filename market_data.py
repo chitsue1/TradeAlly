@@ -108,7 +108,7 @@ class MultiSourceDataProvider:
         self._initialized = True
 
         self.cache:     Dict[str, Tuple[MarketData, float]] = {}
-        self.cache_ttl: int = 300
+        self.cache_ttl: int = 240   # 4 წუთი — scan interval-ზე ნაკლები
 
         # P0/#1 — preload tracking
         self.preloaded_symbols: set = set()

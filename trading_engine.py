@@ -729,13 +729,13 @@ class TradingEngine:
 
                     except Exception as e:
                         logger.error(f"❌ AI error {symbol}: {e}")
-                        if best_conf >= 75:
+                        if best_conf >= 62:
                             sent += 1
                             await self.send_buy_signal(best_signal, None, tier)
                             if best_strategy:
                                 best_strategy.record_activity()
 
-                elif best_conf >= 72:
+                elif best_conf >= 65:
                     sent += 1
                     await self.send_buy_signal(best_signal, None, tier)
                     if best_strategy:
