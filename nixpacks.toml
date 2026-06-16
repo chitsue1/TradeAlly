@@ -1,2 +1,5 @@
+[phases.setup]
+cmds = ["rm -rf /app/.venv"]
+
 [phases.install]
-cmds = ["pip install --no-cache-dir -r requirements.txt"]
+cmds = ["python -m venv /app/.venv", "/app/.venv/bin/pip install --no-cache-dir --upgrade pip", "/app/.venv/bin/pip install --no-cache-dir -r requirements.txt"]
